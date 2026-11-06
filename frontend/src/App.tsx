@@ -1,3 +1,4 @@
+
 import { API_BASE_URL } from './api';
 import { useState, useEffect } from 'react';
 import {
@@ -13,7 +14,8 @@ import {
   LayoutDashboard,
   Wifi,
   WifiOff,
-  FileSpreadsheet
+  FileSpreadsheet,
+  X
 } from 'lucide-react';
 
 import Inicio from './pages/Inicio-temp';
@@ -48,22 +50,31 @@ export default function App() {
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/health`)
       .then((response) => {
-        if (!response.ok) {
-          throw new Error('API error');
-        }
+        if (!response.ok) throw new Error('API error');
         return response.json();
       })
       .then((data) => {
-        setApiStatus(
-          data.status === 'ok'
-            ? 'Conectado'
-            : 'Error de API'
-        );
+        setApiStatus(data.status === 'ok' ? 'Conectado' : 'Error de API');
       })
-      .catch(() => {
-        setApiStatus('Backend desconectado');
-      });
+      .catch(() => setApiStatus('Backend desconectado'));
   }, []);
+
+  // Cerrar menú con Escape y bloquear scroll del fondo
+  useEffect(() => {
+    if (!mobile) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobile(false);
+    };
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [mobile]);
 
   const today = new Date().toLocaleDateString('es-CR', {
     weekday: 'long',
@@ -72,20 +83,22 @@ export default function App() {
     year: 'numeric'
   });
 
+  const navigate = (page: string) => {
+    setActivePage(page);
+    setMobile(false);
+    setOpen(false);
+  };
+
   const renderPage = () => {
     switch (activePage) {
       case 'Agenda':
         return <Agenda />;
-
       case 'Pacientes':
         return <Pacientes />;
-
       case 'Analítica':
         return <Analitica />;
-
       case 'Carga Excel':
         return <CargaExcel />;
-
       default:
         return <Inicio />;
     }
@@ -93,13 +106,36 @@ export default function App() {
 
   return (
     <div className="shell">
+
+      {/* Fondo del menú móvil */}
+      {mobile && (
+        <button
+          type="button"
+          className="mobile-backdrop"
+          aria-label="Cerrar menú"
+          onClick={() => setMobile(false)}
+        />
+      )}
+
+      {/* Sidebar */}
       <aside className={mobile ? 'side open' : 'side'}>
-        <div className="brand">
-          <HeartPulse />
-          <div>
-            <b>VitalIQ</b>
-            <small>INTELLIGENCE IN HEALTH</small>
+        <div className="mobile-side-header">
+          <div className="brand">
+            <HeartPulse />
+            <div>
+              <b>VitalIQ</b>
+              <small>INTELLIGENCE IN HEALTH</small>
+            </div>
           </div>
+
+          <button
+            type="button"
+            className="mobile-close"
+            aria-label="Cerrar menú"
+            onClick={() => setMobile(false)}
+          >
+            <X />
+          </button>
         </div>
 
         <div className="clinic">
@@ -121,10 +157,7 @@ export default function App() {
                 type="button"
                 key={item.name}
                 className={activePage === item.name ? 'active' : ''}
-                onClick={() => {
-                  setActivePage(item.name);
-                  setMobile(false);
-                }}
+                onClick={() => navigate(item.name)}
               >
                 <Icon />
                 {item.name}
@@ -145,23 +178,31 @@ export default function App() {
         </small>
       </aside>
 
+      {/* Contenido principal */}
       <main>
         <header>
           <button
             type="button"
             className="hamb"
+            aria-label={mobile ? 'Cerrar menú' : 'Abrir menú'}
+            aria-expanded={mobile}
             onClick={() => setMobile(!mobile)}
           >
-            <Menu />
+            {mobile ? <X /> : <Menu />}
           </button>
 
-          <span>
-            Clínica Integral San Rafael　/　<b>{activePage}</b>
-          </span>
+          <div className="breadcrumb">
+            <span className="clinic-desktop">
+              Clínica Integral San Rafael
+            </span>
+            <span className="breadcrumb-separator">/</span>
+            <b>{activePage}</b>
+          </div>
 
           <div className="profile">
             <button
               type="button"
+              aria-expanded={open}
               onClick={() => setOpen(!open)}
             >
               <i>{role[0].toUpperCase()}</i>
@@ -235,7 +276,7 @@ export default function App() {
 
                 <button
                   type="button"
-                  onClick={() => setActivePage('Analítica')}
+                  onClick={() => navigate('Analítica')}
                 >
                   Explorar panel <ArrowRight />
                 </button>
@@ -262,10 +303,9 @@ export default function App() {
 
           <div className="notice">
             <ShieldCheck />
+            <span>VitalIQ · Conectado a la plataforma</span>
 
-            VitalIQ · Conectado a la plataforma
-
-            <span style={{ marginLeft: 'auto', fontWeight: 600 }}>
+            <span className="api-indicator">
               {apiStatus === 'Conectado' ? (
                 <>
                   <Wifi size={16} />
