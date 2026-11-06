@@ -2,7 +2,18 @@
 import { API_URL } from '../api';
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid
+} from 'recharts';
 
 const API = `${API_URL}/pacientes`;
 
@@ -18,11 +29,20 @@ type Patient = {
   [key: string]: any;
 };
 
-type Distribution = { name: string; value: number };
+type Distribution = {
+  name: string;
+  value: number;
+};
 
 const COLORS = [
-  '#0EA5E9', '#14B8A6', '#6366F1', '#F59E0B',
-  '#EC4899', '#8B5CF6', '#64748B', '#22C55E'
+  '#0EA5E9',
+  '#14B8A6',
+  '#6366F1',
+  '#F59E0B',
+  '#EC4899',
+  '#8B5CF6',
+  '#64748B',
+  '#22C55E'
 ];
 
 function normalize(value: unknown): string {
@@ -44,7 +64,9 @@ function getDistribution(
       value = 'No especificado';
     }
 
-    if (labels?.[value]) value = labels[value];
+    if (labels?.[value]) {
+      value = labels[value];
+    }
 
     counts[value] = (counts[value] || 0) + 1;
   });
@@ -58,50 +80,53 @@ function StatCard({
   title,
   value,
   subtitle,
-  accent
+  icon,
+  color,
+  percentage
 }: {
   title: string;
   value: string | number;
-  subtitle?: string;
-  accent: string;
+  subtitle: string;
+  icon: string;
+  color: string;
+  percentage?: string;
 }) {
   return (
-    <div style={styles.stat}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{
-          width: 8,
-          height: 8,
-          borderRadius: 3,
-          background: accent
-        }} />
-        <span style={{
-          color: '#64748B',
-          fontSize: 12,
-          fontWeight: 600
-        }}>
-          {title}
-        </span>
+    <div className="viq-kpi">
+      <div className="viq-kpi-top">
+        <div
+          className="viq-kpi-icon"
+          style={{
+            background: `${color}15`,
+            color
+          }}
+        >
+          {icon}
+        </div>
+
+        {percentage && (
+          <span className="viq-kpi-badge">
+            {percentage}
+          </span>
+        )}
       </div>
 
-      <div style={{
-        fontSize: 29,
-        fontWeight: 800,
-        color: '#103653',
-        letterSpacing: '-1px',
-        marginTop: 12
-      }}>
+      <div className="viq-kpi-value">
         {value}
       </div>
 
-      {subtitle && (
-        <div style={{
-          fontSize: 11,
-          color: '#94A3B8',
-          marginTop: 5
-        }}>
-          {subtitle}
-        </div>
-      )}
+      <div className="viq-kpi-title">
+        {title}
+      </div>
+
+      <div className="viq-kpi-subtitle">
+        {subtitle}
+      </div>
+
+      <div
+        className="viq-kpi-line"
+        style={{ background: color }}
+      />
     </div>
   );
 }
@@ -109,32 +134,26 @@ function StatCard({
 function ChartCard({
   title,
   subtitle,
-  children
+  children,
+  badge
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
+  badge?: string;
 }) {
   return (
-    <section style={styles.card}>
-      <div style={{ marginBottom: 18 }}>
-        <h3 style={{
-          color: '#103653',
-          fontSize: 16,
-          margin: 0,
-          fontWeight: 750
-        }}>
-          {title}
-        </h3>
+    <section className="viq-chart-card">
+      <div className="viq-chart-header">
+        <div>
+          <h3>{title}</h3>
+          {subtitle && <p>{subtitle}</p>}
+        </div>
 
-        {subtitle && (
-          <p style={{
-            color: '#94A3B8',
-            fontSize: 12,
-            margin: '6px 0 0'
-          }}>
-            {subtitle}
-          </p>
+        {badge && (
+          <span className="viq-chart-badge">
+            {badge}
+          </span>
         )}
       </div>
 
@@ -143,8 +162,17 @@ function ChartCard({
   );
 }
 
-function DonutChart({ data }: { data: Distribution[] }) {
-  const total = data.reduce((sum, item) => sum + item.value, 0);
+function DonutChart({
+  data,
+  colorSet = COLORS
+}: {
+  data: Distribution[];
+  colorSet?: string[];
+}) {
+  const total = data.reduce(
+    (sum, item) => sum + item.value,
+    0
+  );
 
   return (
     <div className="viq-donut-layout">
@@ -157,49 +185,82 @@ function DonutChart({ data }: { data: Distribution[] }) {
               nameKey="name"
               cx="50%"
               cy="50%"
-              innerRadius="66%"
-              outerRadius="92%"
-              paddingAngle={data.length > 1 ? 3 : 0}
+              innerRadius="67%"
+              outerRadius="94%"
+              paddingAngle={data.length > 1 ? 4 : 0}
               stroke="none"
+              animationDuration={700}
             >
               {data.map((entry, index) => (
                 <Cell
                   key={entry.name}
-                  fill={COLORS[index % COLORS.length]}
+                  fill={colorSet[index % colorSet.length]}
                 />
               ))}
             </Pie>
 
             <Tooltip
-              formatter={(value) => [`${value} pacientes`, 'Cantidad']}
+              formatter={(value) => [
+                `${value} pacientes`,
+                'Cantidad'
+              ]}
+              contentStyle={{
+                borderRadius: 12,
+                border: '1px solid #E2E8F0',
+                boxShadow: '0 8px 25px #0F172A12'
+              }}
             />
           </PieChart>
         </ResponsiveContainer>
 
         <div className="viq-donut-center">
-          <strong>{total}</strong>
+          <strong>
+            {total.toLocaleString('es-CR')}
+          </strong>
           <span>Pacientes</span>
         </div>
       </div>
 
       <div className="viq-donut-legend">
         {data.map((item, index) => (
-          <div key={item.name}>
-            <div className="viq-legend-label">
+          <div
+            className="viq-legend-item"
+            key={item.name}
+          >
+            <div className="viq-legend-heading">
               <span
                 className="viq-legend-dot"
-                style={{ background: COLORS[index % COLORS.length] }}
+                style={{
+                  background: colorSet[index % colorSet.length]
+                }}
               />
-              <span>{item.name}</span>
+
+              <span className="viq-legend-name">
+                {item.name}
+              </span>
             </div>
 
-            <div className="viq-legend-value">
-              <strong>{item.value}</strong>
+            <div className="viq-legend-bottom">
+              <strong>
+                {item.value.toLocaleString('es-CR')}
+              </strong>
+
               <span>
                 {total
-                  ? ((item.value / total) * 100).toFixed(1)
-                  : '0.0'}%
+                  ? `${((item.value / total) * 100).toFixed(1)}%`
+                  : '0%'}
               </span>
+            </div>
+
+            <div className="viq-legend-progress">
+              <div
+                style={{
+                  width: total
+                    ? `${(item.value / total) * 100}%`
+                    : '0%',
+                  background: colorSet[index % colorSet.length]
+                }}
+              />
             </div>
           </div>
         ))}
@@ -211,7 +272,7 @@ function DonutChart({ data }: { data: Distribution[] }) {
 function HorizontalBars({
   data,
   color,
-  heightPerItem = 38,
+  heightPerItem = 42,
   labelWidth = 125
 }: {
   data: Distribution[];
@@ -222,15 +283,23 @@ function HorizontalBars({
   return (
     <ResponsiveContainer
       width="100%"
-      height={Math.max(230, data.length * heightPerItem + 24)}
+      height={Math.max(250, data.length * heightPerItem + 30)}
     >
       <BarChart
         data={data}
         layout="vertical"
-        margin={{ top: 4, right: 32, bottom: 4, left: 8 }}
-        barCategoryGap="25%"
+        margin={{
+          top: 5,
+          right: 35,
+          bottom: 5,
+          left: 5
+        }}
+        barCategoryGap="28%"
       >
-        <CartesianGrid stroke="#E8EEF5" horizontal={false} />
+        <CartesianGrid
+          stroke="#EEF2F7"
+          horizontal={false}
+        />
 
         <XAxis
           type="number"
@@ -246,20 +315,30 @@ function HorizontalBars({
           width={labelWidth}
           axisLine={false}
           tickLine={false}
-          tick={{ fill: '#475569', fontSize: 11 }}
+          tick={{
+            fill: '#475569',
+            fontSize: 11
+          }}
         />
 
         <Tooltip
-          formatter={(value) => [`${value} pacientes`, 'Cantidad']}
-          cursor={{ fill: '#F1F5F9' }}
+          formatter={(value) => [
+            `${value} pacientes`,
+            'Cantidad'
+          ]}
+          cursor={{ fill: '#F8FAFC' }}
+          contentStyle={{
+            borderRadius: 12,
+            border: '1px solid #E2E8F0'
+          }}
         />
 
         <Bar
           dataKey="value"
           fill={color}
-          radius={[0, 7, 7, 0]}
-          barSize={18}
-          animationDuration={650}
+          radius={[0, 8, 8, 0]}
+          barSize={20}
+          animationDuration={700}
         />
       </BarChart>
     </ResponsiveContainer>
@@ -284,7 +363,9 @@ export default function Analitica() {
       setLoading(true);
       setError('');
 
-      const response = await fetch(`${API}?limit=10000&offset=0`);
+      const response = await fetch(
+        `${API}?limit=10000&offset=0`
+      );
 
       if (!response.ok) {
         throw new Error(`Error HTTP ${response.status}`);
@@ -389,7 +470,12 @@ export default function Analitica() {
           : 'distrito';
 
     return getDistribution(filtered, field);
-  }, [patients, geoLevel, selectedProvince, selectedCanton]);
+  }, [
+    patients,
+    geoLevel,
+    selectedProvince,
+    selectedCanton
+  ]);
 
   const patientsByProvince = useMemo(
     () => getDistribution(patients, 'provincia'),
@@ -401,90 +487,136 @@ export default function Analitica() {
       ? `${((value / patients.length) * 100).toFixed(1)}%`
       : '0%';
 
+  const topProvince = patientsByProvince[0];
+  const topGender = genderData[0];
+
   if (loading) {
     return (
-      <div style={styles.page}>
-        <div style={{
-          ...styles.card,
-          textAlign: 'center',
-          padding: 32
-        }}>
-          <div className="viq-loader" />
-          <h2>Cargando analítica demográfica...</h2>
-        </div>
-
+      <div className="viq-page">
         <AnalyticsStyles />
+
+        <div className="viq-loading">
+          <div className="viq-loader" />
+          <h2>Cargando analítica demográfica</h2>
+          <p>Preparando los datos de pacientes...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={styles.page}>
+    <div className="viq-page">
       <AnalyticsStyles />
 
+      {/* HEADER */}
       <header className="viq-header">
         <div>
-          <div className="viq-overline">
-            INTELIGENCIA CLÍNICA
+          <div className="viq-eyebrow">
+            <span className="viq-eyebrow-dot" />
+            VITALIQ · INTELIGENCIA CLÍNICA
           </div>
 
-          <h1 className="viq-title">
-            Analítica demográfica
-          </h1>
+          <h1>Analítica demográfica</h1>
 
-          <p className="viq-description">
-            Distribución y características de los pacientes.
+          <p>
+            Conocé la composición y distribución de la población atendida.
           </p>
         </div>
 
-        <button
-          className="viq-refresh"
-          onClick={loadData}
-        >
-          ↻ &nbsp;Actualizar datos
-        </button>
+        <div className="viq-header-actions">
+          <span className="viq-live-indicator">
+            <span />
+            Datos actualizados
+          </span>
+
+          <button
+            className="viq-refresh"
+            onClick={loadData}
+          >
+            <span>↻</span>
+            Actualizar
+          </button>
+        </div>
       </header>
 
       {error && (
         <div className="viq-error">
-          {error}
+          <strong>⚠ Atención</strong>
+          <span>{error}</span>
         </div>
       )}
 
-      <div className="viq-stats">
+      {/* KPIs */}
+      <section className="viq-kpi-grid">
         <StatCard
           title="Pacientes analizados"
-          value={patients.length}
+          value={patients.length.toLocaleString('es-CR')}
           subtitle="Registros procesados"
-          accent="#0EA5E9"
+          icon="♙"
+          color="#0EA5E9"
         />
 
         <StatCard
-          title="Registros disponibles"
-          value={total}
-          subtitle="Total en el sistema"
-          accent="#6366F1"
+          title="Total en sistema"
+          value={total.toLocaleString('es-CR')}
+          subtitle="Registros disponibles"
+          icon="▤"
+          color="#6366F1"
         />
 
         <StatCard
-          title="Provincias representadas"
+          title="Provincias"
           value={provinces.length}
-          subtitle="Con información registrada"
-          accent="#14B8A6"
+          subtitle="Con pacientes registrados"
+          icon="⌖"
+          color="#14B8A6"
         />
 
         <StatCard
           title="Nacionalidades"
           value={nationalityData.length}
-          subtitle="Categorías identificadas"
-          accent="#F59E0B"
+          subtitle="Representadas en el sistema"
+          icon="◎"
+          color="#F59E0B"
         />
+      </section>
+
+      {/* INSIGHT */}
+      <section className="viq-insight">
+        <div className="viq-insight-icon">✦</div>
+
+        <div className="viq-insight-content">
+          <span>RESUMEN DE POBLACIÓN</span>
+
+          <p>
+            {topGender
+              ? `${topGender.name} representa la categoría con mayor cantidad de pacientes (${percentage(topGender.value)} del total).`
+              : 'No hay información suficiente para generar un resumen.'}
+          </p>
+        </div>
+
+        {topProvince && (
+          <div className="viq-insight-highlight">
+            <span>Provincia principal</span>
+            <strong>{topProvince.name}</strong>
+            <small>{topProvince.value.toLocaleString('es-CR')} pacientes</small>
+          </div>
+        )}
+      </section>
+
+      {/* GÉNERO Y ESTADO CIVIL */}
+      <div className="viq-section-heading">
+        <div>
+          <span>01 / COMPOSICIÓN</span>
+          <h2>Perfil de pacientes</h2>
+        </div>
       </div>
 
       <div className="viq-grid">
         <ChartCard
           title="Distribución por género"
-          subtitle="Composición de pacientes por género"
+          subtitle="Composición de la población atendida"
+          badge={`${genderData.length} categorías`}
         >
           {genderData.length
             ? <DonutChart data={genderData} />
@@ -493,18 +625,38 @@ export default function Analitica() {
 
         <ChartCard
           title="Estado civil"
-          subtitle="Distribución según estado civil registrado"
+          subtitle="Situación civil registrada"
+          badge={`${civilData.length} categorías`}
         >
           {civilData.length
-            ? <DonutChart data={civilData} />
+            ? <DonutChart
+                data={civilData}
+                colorSet={[
+                  '#6366F1',
+                  '#0EA5E9',
+                  '#14B8A6',
+                  '#F59E0B',
+                  '#EC4899',
+                  '#8B5CF6'
+                ]}
+              />
             : <p>Sin datos disponibles</p>}
         </ChartCard>
+      </div>
+
+      {/* NACIONALIDAD Y OCUPACIÓN */}
+      <div className="viq-section-heading">
+        <div>
+          <span>02 / CARACTERÍSTICAS</span>
+          <h2>Información sociodemográfica</h2>
+        </div>
       </div>
 
       <div className="viq-grid">
         <ChartCard
           title="Nacionalidad"
-          subtitle="Pacientes según nacionalidad"
+          subtitle="Distribución por nacionalidad"
+          badge={`${nationalityData.length} categorías`}
         >
           {nationalityData.length
             ? <HorizontalBars
@@ -517,7 +669,8 @@ export default function Analitica() {
 
         <ChartCard
           title="Ocupación"
-          subtitle="Distribución de ocupaciones registradas"
+          subtitle="Actividad laboral registrada"
+          badge={`${occupationData.length} categorías`}
         >
           {occupationData.length
             ? <HorizontalBars
@@ -529,54 +682,98 @@ export default function Analitica() {
         </ChartCard>
       </div>
 
+      {/* GEOGRAFÍA */}
+      <div className="viq-section-heading">
+        <div>
+          <span>03 / TERRITORIO</span>
+          <h2>Distribución geográfica</h2>
+        </div>
+      </div>
+
       <ChartCard
-        title="Distribución geográfica"
-        subtitle="Explora la ubicación de los pacientes"
+        title="Exploración territorial"
+        subtitle="Analizá dónde se encuentran los pacientes"
       >
-        <div className="viq-filters">
-          <label>
-            Nivel geográfico
-            <select
-              value={geoLevel}
-              onChange={e => {
-                setGeoLevel(e.target.value as typeof geoLevel);
+        <div className="viq-filter-panel">
+          <div className="viq-filter-title">
+            <span>⌖</span>
+            Filtros geográficos
+          </div>
+
+          <div className="viq-filters">
+            <label>
+              <span>Nivel de análisis</span>
+              <select
+                value={geoLevel}
+                onChange={e => {
+                  setGeoLevel(
+                    e.target.value as typeof geoLevel
+                  );
+                  setSelectedCanton('');
+                }}
+              >
+                <option value="provincia">Provincia</option>
+                <option value="canton">Cantón</option>
+                <option value="distrito">Distrito</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Provincia</span>
+              <select
+                value={selectedProvince}
+                onChange={e => {
+                  setSelectedProvince(e.target.value);
+                  setSelectedCanton('');
+                }}
+              >
+                <option value="">Todas las provincias</option>
+                {provinces.map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Cantón</span>
+              <select
+                value={selectedCanton}
+                onChange={e => setSelectedCanton(e.target.value)}
+              >
+                <option value="">Todos los cantones</option>
+                {cantons.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              className="viq-filter-reset"
+              onClick={() => {
+                setSelectedProvince('');
                 setSelectedCanton('');
+                setGeoLevel('provincia');
               }}
             >
-              <option value="provincia">Por provincia</option>
-              <option value="canton">Por cantón</option>
-              <option value="distrito">Por distrito</option>
-            </select>
-          </label>
+              Limpiar filtros
+            </button>
+          </div>
+        </div>
 
-          <label>
-            Provincia
-            <select
-              value={selectedProvince}
-              onChange={e => {
-                setSelectedProvince(e.target.value);
-                setSelectedCanton('');
-              }}
-            >
-              <option value="">Todas las provincias</option>
-              {provinces.map(p => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </label>
+        <div className="viq-geography-summary">
+          <div>
+            <span>Ubicaciones identificadas</span>
+            <strong>{geographyData.length}</strong>
+          </div>
 
-          <label>
-            Cantón
-            <select
-              value={selectedCanton}
-              onChange={e => setSelectedCanton(e.target.value)}
-            >
-              <option value="">Todos los cantones</option>
-              {cantons.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </label>
+          <div>
+            <span>Pacientes en selección</span>
+            <strong>
+              {geographyData
+                .reduce((sum, item) => sum + item.value, 0)
+                .toLocaleString('es-CR')}
+            </strong>
+          </div>
         </div>
 
         {geographyData.length
@@ -586,49 +783,82 @@ export default function Analitica() {
               heightPerItem={42}
               labelWidth={145}
             />
-          : <p style={{ color: '#64748B' }}>
+          : <p className="viq-empty">
               Sin datos geográficos disponibles.
             </p>}
       </ChartCard>
 
-      <div style={{ marginTop: 20 }}>
-        <ChartCard
-          title="Resumen por provincia"
-          subtitle="Participación de cada provincia en el total de pacientes"
-        >
-          <div style={{ overflowX: 'auto' }}>
-            <table className="viq-table">
-              <thead>
-                <tr>
-                  <th>Provincia</th>
-                  <th>Pacientes</th>
-                  <th>Participación</th>
-                </tr>
-              </thead>
+      {/* TABLA PROVINCIAL */}
+      <div className="viq-section-heading">
+        <div>
+          <span>04 / DISTRIBUCIÓN</span>
+          <h2>Resumen provincial</h2>
+        </div>
 
-              <tbody>
-                {patientsByProvince.map(item => (
-                  <tr key={item.name}>
-                    <td>{item.name}</td>
-                    <td><strong>{item.value}</strong></td>
-                    <td>
-                      <div className="viq-part">
-                        <span>{percentage(item.value)}</span>
-
-                        <div className="viq-progress">
-                          <div style={{
-                            width: percentage(item.value)
-                          }}/>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </ChartCard>
+        <span className="viq-section-note">
+          {patientsByProvince.length} provincias
+        </span>
       </div>
+
+      <ChartCard
+        title="Pacientes por provincia"
+        subtitle="Participación de cada provincia en el total de registros"
+      >
+        <div className="viq-table-wrapper">
+          <table className="viq-table">
+            <thead>
+              <tr>
+                <th>Provincia</th>
+                <th>Pacientes</th>
+                <th>Participación</th>
+                <th>Distribución</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {patientsByProvince.map((item, index) => (
+                <tr key={item.name}>
+                  <td>
+                    <div className="viq-province-name">
+                      <span className="viq-province-number">
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
+                      <strong>{item.name}</strong>
+                    </div>
+                  </td>
+
+                  <td>
+                    <strong className="viq-table-number">
+                      {item.value.toLocaleString('es-CR')}
+                    </strong>
+                  </td>
+
+                  <td>
+                    <span className="viq-percentage">
+                      {percentage(item.value)}
+                    </span>
+                  </td>
+
+                  <td>
+                    <div className="viq-table-progress">
+                      <div
+                        style={{
+                          width: percentage(item.value)
+                        }}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </ChartCard>
+
+      <footer className="viq-analytics-footer">
+        <span>VITALIQ</span>
+        <span>Analítica demográfica · Datos del sistema</span>
+      </footer>
     </div>
   );
 }
@@ -636,78 +866,354 @@ export default function Analitica() {
 function AnalyticsStyles() {
   return (
     <style>{`
+      .viq-page {
+        background: #F3F6FB;
+        min-height: 100%;
+        padding: clamp(20px, 3vw, 38px);
+        color: #102D46;
+        box-sizing: border-box;
+        font-family: inherit;
+      }
+
       .viq-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 18px;
         flex-wrap: wrap;
-        margin-bottom: 26px;
+        gap: 24px;
+        margin-bottom: 30px;
       }
 
-      .viq-overline {
-        color: #0EA5E9;
-        font-size: 10px;
-        letter-spacing: 2px;
-        font-weight: 800;
-        margin-bottom: 8px;
-      }
-
-      .viq-title {
-        margin: 0 0 8px;
-        color: #103653;
-        font-size: clamp(24px, 3vw, 32px);
-        font-weight: 800;
-        letter-spacing: -.8px;
-      }
-
-      .viq-description {
-        margin: 0;
+      .viq-eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
         color: #64748B;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 1.8px;
+        margin-bottom: 12px;
+      }
+
+      .viq-eyebrow-dot {
+        width: 7px;
+        height: 7px;
+        background: #0EA5E9;
+        border-radius: 50%;
+        box-shadow: 0 0 0 4px #0EA5E915;
+      }
+
+      .viq-header h1 {
+        margin: 0;
+        font-size: clamp(27px, 3vw, 36px);
+        line-height: 1.15;
+        font-weight: 850;
+        letter-spacing: -1.2px;
+        color: #102D46;
+      }
+
+      .viq-header p {
+        margin: 10px 0 0;
+        color: #718198;
         font-size: 14px;
       }
 
+      .viq-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .viq-live-indicator {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: #64748B;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .viq-live-indicator span {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #10B981;
+        box-shadow: 0 0 0 4px #10B98118;
+      }
+
       .viq-refresh {
-        background: #0F5B94;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        background: #103B5C;
         color: white;
         border: 0;
-        border-radius: 10px;
-        padding: 11px 16px;
+        border-radius: 11px;
+        padding: 12px 17px;
         cursor: pointer;
-        font-weight: 650;
         font-size: 13px;
-        box-shadow: 0 4px 12px #0f5b9429;
+        font-weight: 700;
+        transition: .2s ease;
       }
 
       .viq-refresh:hover {
-        background: #0B4775;
+        background: #0B527E;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px #103B5C20;
       }
 
-      .viq-stats {
+      .viq-refresh span {
+        font-size: 18px;
+      }
+
+      /* KPI CARDS */
+
+      .viq-kpi-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 16px;
-        margin-bottom: 22px;
+        gap: 17px;
+        margin-bottom: 25px;
       }
+
+      .viq-kpi {
+        position: relative;
+        background: white;
+        border: 1px solid #E7EDF5;
+        border-radius: 16px;
+        padding: 22px;
+        overflow: hidden;
+        min-width: 0;
+        box-shadow: 0 4px 18px #16324F05;
+        transition: .2s ease;
+      }
+
+      .viq-kpi:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 25px #16324F0B;
+      }
+
+      .viq-kpi-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .viq-kpi-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        font-size: 23px;
+        font-weight: 700;
+      }
+
+      .viq-kpi-badge {
+        color: #0F9B76;
+        background: #ECFDF5;
+        border-radius: 7px;
+        padding: 5px 8px;
+        font-size: 10px;
+        font-weight: 800;
+      }
+
+      .viq-kpi-value {
+        color: #102D46;
+        font-size: clamp(27px, 2.4vw, 34px);
+        font-weight: 850;
+        letter-spacing: -1.2px;
+        margin-top: 22px;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .viq-kpi-title {
+        color: #475569;
+        font-size: 13px;
+        font-weight: 700;
+        margin-top: 10px;
+      }
+
+      .viq-kpi-subtitle {
+        color: #94A3B8;
+        font-size: 11px;
+        margin-top: 6px;
+      }
+
+      .viq-kpi-line {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        opacity: .8;
+      }
+
+      /* INSIGHT */
+
+      .viq-insight {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        background: linear-gradient(110deg, #103B5C, #174C70);
+        color: white;
+        padding: 20px 24px;
+        border-radius: 16px;
+        margin-bottom: 35px;
+        box-shadow: 0 8px 22px #103B5C12;
+      }
+
+      .viq-insight-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: #FFFFFF16;
+        color: #7DD3FC;
+        font-size: 22px;
+      }
+
+      .viq-insight-content {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .viq-insight-content > span {
+        color: #7DD3FC;
+        font-size: 9px;
+        letter-spacing: 1.5px;
+        font-weight: 800;
+      }
+
+      .viq-insight-content p {
+        margin: 7px 0 0;
+        color: #E2EEF7;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .viq-insight-highlight {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 4px;
+        padding-left: 22px;
+        border-left: 1px solid #FFFFFF20;
+        flex-shrink: 0;
+      }
+
+      .viq-insight-highlight span {
+        color: #A9C6D9;
+        font-size: 10px;
+      }
+
+      .viq-insight-highlight strong {
+        font-size: 17px;
+        color: white;
+      }
+
+      .viq-insight-highlight small {
+        color: #A9C6D9;
+        font-size: 10px;
+      }
+
+      /* SECTION HEADINGS */
+
+      .viq-section-heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 15px;
+        margin: 0 0 17px;
+      }
+
+      .viq-section-heading > div > span {
+        color: #0EA5E9;
+        font-size: 9px;
+        letter-spacing: 1.5px;
+        font-weight: 850;
+      }
+
+      .viq-section-heading h2 {
+        margin: 6px 0 0;
+        font-size: 21px;
+        font-weight: 800;
+        letter-spacing: -.5px;
+        color: #102D46;
+      }
+
+      .viq-section-note {
+        color: #94A3B8;
+        font-size: 11px;
+      }
+
+      /* CHART CARDS */
 
       .viq-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 20px;
-        margin-bottom: 20px;
+        margin-bottom: 34px;
       }
+
+      .viq-chart-card {
+        background: white;
+        border: 1px solid #E7EDF5;
+        border-radius: 17px;
+        padding: 24px;
+        min-width: 0;
+        box-shadow: 0 4px 18px #16324F05;
+      }
+
+      .viq-chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 22px;
+      }
+
+      .viq-chart-header h3 {
+        color: #173852;
+        font-size: 15px;
+        font-weight: 800;
+        margin: 0;
+      }
+
+      .viq-chart-header p {
+        color: #94A3B8;
+        font-size: 11px;
+        margin: 7px 0 0;
+      }
+
+      .viq-chart-badge {
+        flex-shrink: 0;
+        color: #64748B;
+        background: #F1F5F9;
+        padding: 6px 9px;
+        border-radius: 7px;
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      /* DONUTS */
 
       .viq-donut-layout {
         display: grid;
-        grid-template-columns: minmax(140px, 1fr) minmax(115px, 1fr);
+        grid-template-columns: minmax(160px, 1.05fr) minmax(130px, .95fr);
         align-items: center;
         gap: 12px;
-        min-height: 250px;
+        min-height: 270px;
       }
 
       .viq-donut-visual {
         position: relative;
-        height: 250px;
+        height: 270px;
         min-width: 0;
       }
 
@@ -722,164 +1228,346 @@ function AnalyticsStyles() {
       }
 
       .viq-donut-center strong {
-        color: #103653;
-        font-size: 30px;
+        font-size: 28px;
+        font-weight: 850;
+        color: #102D46;
         letter-spacing: -1px;
       }
 
       .viq-donut-center span {
         color: #94A3B8;
-        font-size: 11px;
-        margin-top: 2px;
+        font-size: 10px;
+        margin-top: 4px;
       }
 
       .viq-donut-legend {
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 16px;
         min-width: 0;
       }
 
-      .viq-legend-label {
+      .viq-legend-item {
+        min-width: 0;
+      }
+
+      .viq-legend-heading {
         display: flex;
         align-items: center;
         gap: 7px;
-        color: #64748B;
-        font-size: 12px;
       }
 
       .viq-legend-dot {
-        width: 9px;
-        height: 9px;
+        width: 8px;
+        height: 8px;
         border-radius: 3px;
         flex-shrink: 0;
       }
 
-      .viq-legend-value {
+      .viq-legend-name {
+        color: #64748B;
+        font-size: 11px;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+
+      .viq-legend-bottom {
         display: flex;
         align-items: baseline;
-        gap: 7px;
-        margin: 4px 0 0 16px;
+        justify-content: space-between;
+        gap: 6px;
+        margin-top: 5px;
       }
 
-      .viq-legend-value strong {
-        color: #103653;
-        font-size: 16px;
+      .viq-legend-bottom strong {
+        color: #173852;
+        font-size: 17px;
+        font-weight: 800;
       }
 
-      .viq-legend-value span {
+      .viq-legend-bottom span {
         color: #94A3B8;
-        font-size: 11px;
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .viq-legend-progress {
+        width: 100%;
+        height: 4px;
+        border-radius: 99px;
+        background: #F1F5F9;
+        overflow: hidden;
+        margin-top: 7px;
+      }
+
+      .viq-legend-progress div {
+        height: 100%;
+        border-radius: 99px;
+      }
+
+      /* GEOGRAPHY FILTERS */
+
+      .viq-filter-panel {
+        background: #F8FAFC;
+        border: 1px solid #E8EEF5;
+        border-radius: 13px;
+        padding: 17px;
+        margin-bottom: 20px;
+      }
+
+      .viq-filter-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #173852;
+        font-size: 12px;
+        font-weight: 800;
+        margin-bottom: 14px;
+      }
+
+      .viq-filter-title span {
+        color: #0EA5E9;
+        font-size: 17px;
       }
 
       .viq-filters {
         display: flex;
+        align-items: flex-end;
         flex-wrap: wrap;
         gap: 12px;
-        margin-bottom: 20px;
       }
 
       .viq-filters label {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 7px;
+        flex: 1;
+        min-width: 150px;
+      }
+
+      .viq-filters label > span {
         color: #64748B;
-        font-size: 11px;
-        font-weight: 600;
+        font-size: 10px;
+        font-weight: 700;
       }
 
       .viq-filters select {
-        min-width: 180px;
-        max-width: 100%;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
         border: 1px solid #DCE5EF;
         border-radius: 9px;
-        padding: 10px 12px;
+        padding: 11px 12px;
         background: white;
         color: #23435F;
-        font-size: 13px;
+        font-size: 12px;
         outline: none;
+        cursor: pointer;
       }
 
       .viq-filters select:focus {
         border-color: #0EA5E9;
-        box-shadow: 0 0 0 3px #0ea5e91a;
+        box-shadow: 0 0 0 3px #0EA5E915;
+      }
+
+      .viq-filter-reset {
+        border: 1px solid #DCE5EF;
+        background: white;
+        color: #64748B;
+        border-radius: 9px;
+        padding: 11px 13px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: .2s ease;
+      }
+
+      .viq-filter-reset:hover {
+        border-color: #0EA5E9;
+        color: #0EA5E9;
+      }
+
+      .viq-geography-summary {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      .viq-geography-summary > div {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        background: #F8FAFC;
+        border: 1px solid #EDF2F7;
+        padding: 13px 16px;
+        border-radius: 10px;
+        flex: 1;
+      }
+
+      .viq-geography-summary span {
+        color: #94A3B8;
+        font-size: 10px;
+      }
+
+      .viq-geography-summary strong {
+        color: #173852;
+        font-size: 20px;
+        font-weight: 800;
+      }
+
+      /* PROVINCE TABLE */
+
+      .viq-table-wrapper {
+        width: 100%;
+        overflow-x: auto;
       }
 
       .viq-table {
         width: 100%;
-        border-collapse: separate;
-        border-spacing: 0;
-        font-size: 13px;
+        min-width: 520px;
+        border-collapse: collapse;
+        font-size: 12px;
       }
 
       .viq-table th {
+        background: #F8FAFC;
+        color: #94A3B8;
         text-align: left;
-        background: #F6F9FC;
-        color: #64748B;
-        font-size: 11px;
+        font-size: 9px;
+        font-weight: 800;
         text-transform: uppercase;
-        letter-spacing: .5px;
-        padding: 13px 15px;
-      }
-
-      .viq-table th:first-child {
-        border-radius: 8px 0 0 8px;
-      }
-
-      .viq-table th:last-child {
-        border-radius: 0 8px 8px 0;
+        letter-spacing: 1px;
+        padding: 15px 16px;
+        border-bottom: 1px solid #E8EEF5;
       }
 
       .viq-table td {
-        padding: 14px 15px;
-        color: #334E68;
-        border-bottom: 1px solid #EDF2F7;
+        padding: 16px;
+        color: #475569;
+        border-bottom: 1px solid #F1F5F9;
+      }
+
+      .viq-table tbody tr:last-child td {
+        border-bottom: 0;
       }
 
       .viq-table tbody tr:hover td {
         background: #FAFCFE;
       }
 
-      .viq-part {
+      .viq-province-name {
         display: flex;
         align-items: center;
         gap: 12px;
-        min-width: 130px;
       }
 
-      .viq-part > span {
-        min-width: 42px;
+      .viq-province-number {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 27px;
+        height: 27px;
+        border-radius: 8px;
+        background: #F1F5F9;
+        color: #94A3B8;
+        font-size: 9px;
+        font-weight: 800;
+      }
+
+      .viq-province-name strong {
+        color: #173852;
+        font-weight: 700;
+      }
+
+      .viq-table-number {
+        color: #173852;
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      .viq-percentage {
         color: #64748B;
+        font-weight: 700;
         font-variant-numeric: tabular-nums;
       }
 
-      .viq-progress {
-        flex: 1;
-        height: 6px;
+      .viq-table-progress {
+        width: 100%;
+        max-width: 150px;
+        height: 7px;
         background: #EAF0F6;
         border-radius: 99px;
         overflow: hidden;
       }
 
-      .viq-progress div {
+      .viq-table-progress div {
         height: 100%;
-        background: #0EA5E9;
+        background: linear-gradient(90deg, #0EA5E9, #14B8A6);
         border-radius: 99px;
       }
 
+      /* FOOTER & STATES */
+
+      .viq-analytics-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 30px;
+        padding-top: 18px;
+        border-top: 1px solid #E2E8F0;
+        color: #94A3B8;
+        font-size: 10px;
+      }
+
+      .viq-analytics-footer span:first-child {
+        color: #64748B;
+        font-weight: 850;
+        letter-spacing: 1.5px;
+      }
+
+      .viq-empty {
+        text-align: center;
+        padding: 35px;
+        color: #94A3B8;
+        font-size: 12px;
+      }
+
       .viq-error {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
         background: #FEF2F2;
         color: #991B1B;
         border: 1px solid #FECACA;
-        padding: 14px 16px;
-        border-radius: 10px;
-        margin-bottom: 20px;
+        padding: 15px 18px;
+        border-radius: 12px;
+        margin-bottom: 22px;
+        font-size: 12px;
+      }
+
+      .viq-loading {
+        background: white;
+        border: 1px solid #E7EDF5;
+        border-radius: 17px;
+        padding: 60px 20px;
+        text-align: center;
+      }
+
+      .viq-loading h2 {
+        color: #173852;
+        font-size: 17px;
+        margin: 20px 0 8px;
+      }
+
+      .viq-loading p {
+        color: #94A3B8;
+        font-size: 12px;
       }
 
       .viq-loader {
-        width: 30px;
-        height: 30px;
-        border: 3px solid #DCEAF5;
+        width: 32px;
+        height: 32px;
+        border: 3px solid #E0F2FE;
         border-top-color: #0EA5E9;
         border-radius: 50%;
         animation: viqspin .8s linear infinite;
@@ -890,86 +1578,169 @@ function AnalyticsStyles() {
         to { transform: rotate(360deg); }
       }
 
-      @media(max-width:1100px) {
-        .viq-stats {
+      /* RESPONSIVE */
+
+      @media(max-width:1200px) {
+        .viq-kpi-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .viq-donut-layout {
+          grid-template-columns: minmax(130px, 1fr) minmax(120px, 1fr);
         }
       }
 
-      @media(max-width:760px) {
+      @media(max-width:900px) {
         .viq-grid {
           grid-template-columns: minmax(0, 1fr);
         }
 
         .viq-donut-layout {
-          grid-template-columns: minmax(130px, .9fr) minmax(120px, 1.1fr);
+          grid-template-columns: minmax(180px, .8fr) minmax(160px, 1.2fr);
         }
 
         .viq-donut-visual {
-          height: 220px;
-        }
-      }
-
-      @media(max-width:420px) {
-        .viq-stats {
-          gap: 10px;
-        }
-
-        .viq-donut-layout {
-          grid-template-columns: minmax(0, 1fr);
-        }
-
-        .viq-donut-visual {
-          height: 210px;
+          height: 250px;
         }
 
         .viq-donut-legend {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 18px;
+        }
+      }
+
+      @media(max-width:600px) {
+        .viq-page {
+          padding: 16px;
+        }
+
+        .viq-header {
+          align-items: flex-start;
+          flex-direction: column;
+          margin-bottom: 23px;
+        }
+
+        .viq-header-actions {
+          width: 100%;
+          justify-content: space-between;
+        }
+
+        .viq-kpi-grid {
+          gap: 10px;
+        }
+
+        .viq-kpi {
+          padding: 16px;
+          border-radius: 13px;
+        }
+
+        .viq-kpi-icon {
+          width: 35px;
+          height: 35px;
+          font-size: 20px;
+        }
+
+        .viq-kpi-value {
+          font-size: 26px;
+          margin-top: 17px;
+        }
+
+        .viq-kpi-title {
+          font-size: 11px;
+        }
+
+        .viq-kpi-subtitle {
+          font-size: 10px;
+        }
+
+        .viq-insight {
+          align-items: flex-start;
+          flex-wrap: wrap;
+          padding: 17px;
           gap: 12px;
         }
 
+        .viq-insight-content {
+          flex-basis: calc(100% - 55px);
+        }
+
+        .viq-insight-highlight {
+          flex-basis: 100%;
+          align-items: flex-start;
+          border-left: 0;
+          border-top: 1px solid #FFFFFF20;
+          padding: 13px 0 0;
+        }
+
+        .viq-section-heading h2 {
+          font-size: 19px;
+        }
+
+        .viq-chart-card {
+          padding: 17px;
+          border-radius: 14px;
+        }
+
+        .viq-chart-header {
+          margin-bottom: 15px;
+        }
+
+        .viq-donut-layout {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 5px;
+        }
+
+        .viq-donut-visual {
+          height: 230px;
+        }
+
+        .viq-donut-legend {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 15px;
+          padding: 0 5px 10px;
+        }
+
+        .viq-geography-summary {
+          flex-direction: column;
+        }
+
+        .viq-filters {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
         .viq-filters label {
+          min-width: 0;
           width: 100%;
         }
 
-        .viq-filters select {
+        .viq-filter-reset {
           width: 100%;
-          min-width: 0;
+        }
+
+        .viq-analytics-footer {
+          flex-direction: column;
+        }
+      }
+
+      @media(max-width:360px) {
+        .viq-kpi {
+          padding: 13px;
+        }
+
+        .viq-kpi-value {
+          font-size: 23px;
+        }
+
+        .viq-kpi-badge {
+          font-size: 9px;
+        }
+
+        .viq-donut-legend {
+          grid-template-columns: minmax(0, 1fr);
         }
       }
     `}</style>
   );
 }
-
-const styles: {
-  page: CSSProperties;
-  stat: CSSProperties;
-  card: CSSProperties;
-} = {
-  page: {
-    padding: 'clamp(16px,3vw,32px)',
-    background: '#F5F8FC',
-    minHeight: '100%',
-    color: '#103653',
-    boxSizing: 'border-box'
-  },
-
-  stat: {
-    background: '#fff',
-    border: '1px solid #E5EDF5',
-    borderRadius: 14,
-    padding: '18px 20px',
-    boxShadow: '0 3px 12px #0f355406',
-    minWidth: 0
-  },
-
-  card: {
-    background: '#fff',
-    border: '1px solid #E5EDF5',
-    borderRadius: 14,
-    padding: 'clamp(16px,2vw,22px)',
-    minWidth: 0,
-    boxShadow: '0 3px 12px #0f355406'
-  }
-};
