@@ -1006,3 +1006,47 @@
     animation: none;
   }
 }
+
+/* =========================================
+   VITALIQ - CORRECCIÓN DESPLAZAMIENTO MÓVIL
+========================================= */
+
+@media (max-width: 650px) {
+  .dashboard,
+  .dashboard-heading,
+  .dashboard-heading > div {
+    position: static !important;
+    transform: none;
+  }
+
+  .dashboard-heading {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    width: 100%;
+  }
+
+  .dashboard-heading h2 {
+    position: static !important;
+    font-size: 27px;
+    line-height: 1.2;
+    margin: 12px 0;
+  }
+
+  .dashboard-heading p {
+    position: static !important;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .dashboard-heading button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  main,
+  main section {
+    overflow: visible;
+  }
+}
