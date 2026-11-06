@@ -1,4 +1,4 @@
-
+import { API_URL } from '../api';
 import { useEffect, useState } from "react";
 
 type CalendarEvent = {
@@ -23,7 +23,7 @@ export default function Agenda() {
       setError("");
 
       const response = await fetch(
-        "http://localhost:8001/api/calendar/events"
+        `${API_URL}/calendar/events`
       );
 
       if (!response.ok) {

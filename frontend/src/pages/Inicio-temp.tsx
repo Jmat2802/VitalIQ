@@ -1,4 +1,4 @@
-
+import { API_BASE_URL } from '../api';
 import { useEffect, useState } from 'react';
 import {
   Users,
@@ -14,7 +14,7 @@ import {
   CreditCard
 } from 'lucide-react';
 
-const API = 'http://localhost:8001';
+const API = API_BASE_URL;
 
 type CalendarEvent = {
   id: string;

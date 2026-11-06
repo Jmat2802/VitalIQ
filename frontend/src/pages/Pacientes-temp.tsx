@@ -1,4 +1,4 @@
-
+import { API_URL } from '../api';
 import { useEffect, useState } from 'react';
 import {
   Search,
@@ -50,8 +50,6 @@ type PatientsResponse = {
   offset: number;
   patients: Patient[];
 };
-
-const API_URL = 'http://localhost:8001/api';
 
 function formatValue(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';

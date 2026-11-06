@@ -1,4 +1,4 @@
-
+import { API_BASE_URL } from './api';
 import { useState, useEffect } from 'react';
 import {
   Activity,
@@ -46,7 +46,7 @@ export default function App() {
   const [apiStatus, setApiStatus] = useState('Comprobando conexión...');
 
   useEffect(() => {
-    fetch('http://localhost:8001/api/health')
+    fetch(`${API_BASE_URL}/api/health`)
       .then((response) => {
         if (!response.ok) {
           throw new Error('API error');

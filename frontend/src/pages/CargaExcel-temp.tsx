@@ -1,4 +1,4 @@
-
+import { API_URL } from '../api';
 import { useState } from 'react';
 
 interface PatientImportResult {
@@ -66,7 +66,7 @@ export default function CargaExcel() {
         formData.append('file', file);
 
         const response = await fetch(
-          'http://localhost:8001/api/pacientes/import',
+          `${API_URL}/pacientes/import`,
           {
             method: 'POST',
             body: formData,
@@ -120,7 +120,7 @@ export default function CargaExcel() {
         formData.append('file', file);
 
         const response = await fetch(
-          'http://localhost:8001/api/atenciones/import',
+          `${API_URL}/atenciones/import`,
           {
             method: 'POST',
             body: formData,

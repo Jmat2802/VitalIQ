@@ -1,4 +1,4 @@
-
+import { API_URL } from '../api';
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 
@@ -16,7 +16,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 
-const API = 'http://localhost:8001/api/pacientes';
+const API = `${API_URL}/pacientes`;
 
 type Patient = {
   id: number;
