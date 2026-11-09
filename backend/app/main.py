@@ -2,10 +2,12 @@ import os
 import secrets
 import json
 
-from fastapi import Request
+from fastapi import Request, Cookie
 from fastapi.responses import JSONResponse, RedirectResponse
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 from google.auth.transport.requests import Request as GoogleRequest
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +15,7 @@ from openpyxl import load_workbook
 from io import BytesIO
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 import re
 import unicodedata
@@ -23,6 +25,152 @@ from app.models import Patient, ClinicalRecord
 
 
 app = FastAPI(title="VitalIQ API")
+
+
+# ============================================================
+# AUTENTICACIÓN VITALIQ (Google Sign-In + sesión firmada)
+# ============================================================
+
+ADMIN_EMAILS = {"jmadrigal_abarca@yahoo.com"}
+COLLABORATOR_EMAILS = {"clinicasanrafael07@gmail.com"}
+SESSION_COOKIE = "vitaliq_session"
+SESSION_MAX_AGE = 60 * 60 * 12  # 12 horas
+
+
+def session_serializer():
+    secret = os.getenv("SESSION_SECRET")
+    if not secret:
+        raise HTTPException(
+            status_code=500,
+            detail="Falta SESSION_SECRET en las variables de entorno de Render."
+        )
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(secret, salt="vitaliq-auth-v1")
+
+
+def current_user(vitaliq_session: str | None = Cookie(default=None)):
+    if not vitaliq_session:
+        raise HTTPException(status_code=401, detail="Debes iniciar sesión en VitalIQ.")
+    try:
+        data = session_serializer().loads(vitaliq_session, max_age=SESSION_MAX_AGE)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Sesión inválida o expirada.")
+    email = (data.get("email") or "").strip().lower()
+    if email in {x.lower() for x in ADMIN_EMAILS}:
+        role = "admin"
+    elif email in {x.lower() for x in COLLABORATOR_EMAILS}:
+        role = "colaborador"
+    else:
+        raise HTTPException(status_code=403, detail="Tu cuenta no está autorizada para VitalIQ.")
+    return {"email": email, "name": data.get("name", email), "role": role}
+
+
+def require_admin(user=Depends(current_user)):
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Acceso exclusivo para administradores.")
+    return user
+
+
+def require_upload_access(user=Depends(current_user)):
+    if user["role"] not in ("admin", "colaborador"):
+        raise HTTPException(status_code=403, detail="No tienes permiso para cargar archivos.")
+    return user
+
+
+@app.get("/api/auth/google")
+def auth_google():
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=500, detail="Faltan GOOGLE_CLIENT_ID o GOOGLE_CLIENT_SECRET.")
+    state = secrets.token_urlsafe(32)
+    verifier = secrets.token_urlsafe(64)
+    redirect_uri = os.getenv(
+        "GOOGLE_LOGIN_REDIRECT_URI",
+        "https://vitaliq-api.onrender.com/api/auth/google/callback"
+    )
+    config = {"web": {
+        "client_id": client_id, "client_secret": client_secret,
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "redirect_uris": [redirect_uri],
+    }}
+    flow = Flow.from_client_config(
+        config, scopes=["openid", "email", "profile"],
+        state=state, code_verifier=verifier
+    )
+    flow.redirect_uri = redirect_uri
+    url, _ = flow.authorization_url(
+        access_type="online", prompt="select_account",
+        code_challenge_method="S256"
+    )
+    response = RedirectResponse(url)
+    response.set_cookie("vitaliq_login_state", state, httponly=True,
+                        secure=True, samesite="lax", max_age=600)
+    response.set_cookie("vitaliq_login_verifier", verifier, httponly=True,
+                        secure=True, samesite="lax", max_age=600)
+    return response
+
+
+@app.get("/api/auth/google/callback")
+def auth_google_callback(request: Request, code: str, state: str):
+    saved_state = request.cookies.get("vitaliq_login_state")
+    verifier = request.cookies.get("vitaliq_login_verifier")
+    if not saved_state or not secrets.compare_digest(saved_state, state) or not verifier:
+        raise HTTPException(status_code=400, detail="Login OAuth inválido o expirado. Intenta de nuevo.")
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    redirect_uri = os.getenv(
+        "GOOGLE_LOGIN_REDIRECT_URI",
+        "https://vitaliq-api.onrender.com/api/auth/google/callback"
+    )
+    config = {"web": {
+        "client_id": client_id, "client_secret": client_secret,
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "redirect_uris": [redirect_uri],
+    }}
+    flow = Flow.from_client_config(
+        config, scopes=["openid", "email", "profile"],
+        state=state, code_verifier=verifier
+    )
+    flow.redirect_uri = redirect_uri
+    flow.fetch_token(code=code)
+    claims = id_token.verify_oauth2_token(
+        flow.credentials.id_token, google_requests.Request(), client_id
+    )
+    email = (claims.get("email") or "").strip().lower()
+    if not claims.get("email_verified"):
+        raise HTTPException(status_code=403, detail="Google no confirmó el correo.")
+    allowed = {x.lower() for x in ADMIN_EMAILS | COLLABORATOR_EMAILS}
+    if email not in allowed:
+        raise HTTPException(status_code=403, detail="Cuenta Google no autorizada para VitalIQ.")
+    payload = {"email": email, "name": claims.get("name", email)}
+    signed = session_serializer().dumps(payload)
+    frontend = os.getenv("FRONTEND_URL", "https://vital-iq-sand.vercel.app")
+    response = RedirectResponse(frontend)
+    response.set_cookie(SESSION_COOKIE, signed, httponly=True, secure=True,
+                        samesite="lax", max_age=SESSION_MAX_AGE, path="/")
+    for key in ("vitaliq_login_state", "vitaliq_login_verifier"):
+        response.delete_cookie(key)
+    return response
+
+
+@app.get("/api/auth/me")
+def auth_me(user=Depends(current_user)):
+    return {"authenticated": True, "user": user}
+
+
+@app.post("/api/auth/logout")
+def auth_logout():
+    response = JSONResponse({"success": True, "message": "Sesión cerrada."})
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return response
+
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok"}
 
 
 # ============================================================
@@ -37,6 +185,7 @@ app.add_middleware(
     ],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 
@@ -318,7 +467,7 @@ def process_patients_excel(file_bytes, filename):
 # ============================================================
 
 @app.post("/api/excel/preview")
-async def preview_excel(file: UploadFile = File(...)):
+async def preview_excel(file: UploadFile = File(...), user=Depends(require_upload_access)):
     if not (file.filename or "").lower().endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="Por ahora solo se aceptan archivos .xlsx")
 
@@ -330,7 +479,7 @@ async def preview_excel(file: UploadFile = File(...)):
 
 
 @app.post("/api/excel/preview-multiple")
-async def preview_multiple_excel(files: list[UploadFile] = File(...)):
+async def preview_multiple_excel(files: list[UploadFile] = File(...), user=Depends(require_upload_access)):
     results = []
 
     for file in files:
@@ -364,7 +513,7 @@ async def preview_multiple_excel(files: list[UploadFile] = File(...)):
 
 
 @app.post("/api/pacientes/preview")
-async def preview_patients(file: UploadFile = File(...)):
+async def preview_patients(file: UploadFile = File(...), user=Depends(require_upload_access)):
     filename = file.filename or "archivo.xlsx"
 
     if not filename.lower().endswith(".xlsx"):
@@ -382,7 +531,7 @@ async def preview_patients(file: UploadFile = File(...)):
 # ============================================================
 
 @app.post("/api/pacientes/import")
-async def import_patients(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def import_patients(file: UploadFile = File(...), db: Session = Depends(get_db), user=Depends(require_upload_access)):
     filename = file.filename or "archivo.xlsx"
 
     if not filename.lower().endswith(".xlsx"):
@@ -436,7 +585,7 @@ async def import_patients(file: UploadFile = File(...), db: Session = Depends(ge
 # ============================================================
 
 @app.get("/api/pacientes")
-def get_patients(search: str = "", limit: int = 100, offset: int = 0, db: Session = Depends(get_db)):
+def get_patients(search: str = "", limit: int = 100, offset: int = 0, db: Session = Depends(get_db), user=Depends(require_admin)):
     query = db.query(Patient)
 
     if search:
@@ -661,7 +810,7 @@ def process_daily_excel(file_bytes, filename):
 # ============================================================
 
 @app.post("/api/atenciones/import")
-async def import_daily_records(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def import_daily_records(file: UploadFile = File(...), db: Session = Depends(get_db), user=Depends(require_upload_access)):
     filename = file.filename or "hoja_diaria.xlsx"
 
     if not filename.lower().endswith(".xlsx"):
@@ -751,7 +900,7 @@ async def import_daily_records(file: UploadFile = File(...), db: Session = Depen
 # ============================================================
 
 @app.get("/api/pacientes/{patient_id}/atenciones")
-def get_patient_clinical_history(patient_id: int, db: Session = Depends(get_db)):
+def get_patient_clinical_history(patient_id: int, db: Session = Depends(get_db), user=Depends(require_admin)):
     patient = db.query(Patient).filter(Patient.id == patient_id).first()
 
     if not patient:
@@ -807,6 +956,8 @@ def get_patient_clinical_history(patient_id: int, db: Session = Depends(get_db))
 from pathlib import Path
 from datetime import datetime, timezone
 from google.oauth2.credentials import Credentials
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 from googleapiclient.discovery import build
 from fastapi import HTTPException, Query
 
@@ -906,7 +1057,7 @@ def calendar_callback(request: Request, code: str, state: str):
 
 
 @app.get("/api/calendar/events")
-def get_calendar_events(max_results: int = Query(100, ge=1, le=250)):
+def get_calendar_events(max_results: int = Query(100, ge=1, le=250), user=Depends(require_admin)):
     try:
         # Prioridad: token guardado en PostgreSQL. Fallback temporal al token.json local.
         with engine.connect() as conn:
@@ -957,7 +1108,7 @@ def get_calendar_events(max_results: int = Query(100, ge=1, le=250)):
         raise HTTPException(status_code=500, detail=f"Error consultando Google Calendar: {str(e)}")
 
 @app.get("/api/dashboard/stats")
-def dashboard_stats(db: Session = Depends(get_db)):
+def dashboard_stats(db: Session = Depends(get_db), user=Depends(require_admin)):
     from sqlalchemy import func
 
     def grouped_count(model_field, model):
@@ -1048,3 +1199,5 @@ def dashboard_stats(db: Session = Depends(get_db)):
         "comercial": comercial,
         "finanzas": finanzas,
     }
+
+# Nota: /api/calendar/auth y /api/calendar/callback conservan el OAuth de Calendar independiente.
