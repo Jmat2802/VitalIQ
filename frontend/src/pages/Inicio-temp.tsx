@@ -505,6 +505,9 @@ function DashboardStyles() {
         color: #45658f;
         font-size: 12px;
         margin-bottom: 24px;
+        position: relative;
+margin-top: 16px;
+width: 100%;
       }
 
       .vi-home-status-dot {
@@ -1284,6 +1287,10 @@ function DashboardStyles() {
         .vi-home-heading-actions {
           align-items: flex-start;
           flex-direction: column;
+          width: 100%;
+  gap: 14px;
+  position: relative;
+  z-index: 1;
         }
 
         .vi-home-appointment {
