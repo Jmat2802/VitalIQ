@@ -1214,14 +1214,15 @@ function DashboardStyles() {
 
       @media (max-width: 760px) {
         .vi-home-heading {
-          position: sticky;
-          top: 66px;
-          z-index: 90;
-          flex-direction: column;
-          align-items: stretch;
-          padding: 14px 0;
-          background: #f6f8fc;
-          border-bottom: 1px solid #e8edf4;
+    position: relative;
+    top: auto;
+    z-index: auto;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0;
+    margin-bottom: 26px;
+    background: transparent;
+    border-bottom: none;
         }
 
         .vi-home-heading-actions {
