@@ -807,7 +807,6 @@ def get_patient_clinical_history(patient_id: int, db: Session = Depends(get_db))
 from pathlib import Path
 from datetime import datetime, timezone
 from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from fastapi import HTTPException, Query
 
