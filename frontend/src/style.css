@@ -1699,3 +1699,28 @@ footer {
     transition: none !important;
   }
 }
+
+/* =========================================
+   VITALIQ - FIX ENCABEZADO INICIO MÓVIL
+========================================= */
+
+@media (max-width: 650px) {
+  .vi-home-heading {
+    position: sticky;
+    top: 66px;
+    z-index: 90;
+
+    background: #f6f8fc;
+    padding: 14px 0;
+
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .vi-home-title {
+    position: relative;
+    margin: 0;
+    line-height: 1.2;
+  }
+}

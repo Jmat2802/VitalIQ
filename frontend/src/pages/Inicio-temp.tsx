@@ -443,13 +443,6 @@ function DashboardStyles() {
         color: #15243a;
       }
 
-      .vi-home-subtitle {
-        margin: 10px 0 0;
-        font-size: 14px;
-        color: #718096;
-        line-height: 1.6;
-      }
-
       .vi-home-heading-actions {
         display: flex;
         flex-direction: column;
@@ -1221,8 +1214,14 @@ function DashboardStyles() {
 
       @media (max-width: 760px) {
         .vi-home-heading {
+          position: sticky;
+          top: 66px;
+          z-index: 90;
           flex-direction: column;
           align-items: stretch;
+          padding: 14px 0;
+          background: #f6f8fc;
+          border-bottom: 1px solid #e8edf4;
         }
 
         .vi-home-heading-actions {
@@ -1437,9 +1436,6 @@ export default function Inicio() {
 
           <h1 className="vi-home-title">Dashboard Ejecutivo</h1>
 
-          <p className="vi-home-subtitle">
-            Una visión integral de la actividad y el desempeño de la clínica.
-          </p>
         </div>
 
         <div className="vi-home-heading-actions">
