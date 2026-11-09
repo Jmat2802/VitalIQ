@@ -815,11 +815,12 @@ GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "https://vitaliq-api.onrender.com/api/calendar/callback")
 
 
-def google_oauth_flow(state=None):
+def google_oauth_flow(state=None, code_verifier=None):
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
     if not client_id or not client_secret:
         raise HTTPException(status_code=500, detail="Faltan GOOGLE_CLIENT_ID o GOOGLE_CLIENT_SECRET en Render.")
+
     config = {
         "web": {
             "client_id": client_id,
@@ -829,7 +830,13 @@ def google_oauth_flow(state=None):
             "redirect_uris": [GOOGLE_REDIRECT_URI],
         }
     }
-    flow = Flow.from_client_config(config, scopes=GOOGLE_SCOPES, state=state)
+
+    flow = Flow.from_client_config(
+        config,
+        scopes=GOOGLE_SCOPES,
+        state=state,
+        code_verifier=code_verifier,
+    )
     flow.redirect_uri = GOOGLE_REDIRECT_URI
     return flow
 
@@ -837,28 +844,50 @@ def google_oauth_flow(state=None):
 @app.get("/api/calendar/auth")
 def calendar_auth():
     state = secrets.token_urlsafe(32)
-    flow = google_oauth_flow(state=state)
+    code_verifier = secrets.token_urlsafe(64)
+
+    flow = google_oauth_flow(state=state, code_verifier=code_verifier)
     authorization_url, _ = flow.authorization_url(
         access_type="offline",
         prompt="select_account consent",
         include_granted_scopes="true",
+        code_challenge_method="S256",
     )
+
     response = RedirectResponse(authorization_url)
-    response.set_cookie("calendar_oauth_state", state, httponly=True, secure=True, samesite="lax", max_age=600)
+    response.set_cookie(
+        "calendar_oauth_state", state,
+        httponly=True, secure=True, samesite="lax", max_age=600,
+    )
+    response.set_cookie(
+        "calendar_oauth_verifier", code_verifier,
+        httponly=True, secure=True, samesite="lax", max_age=600,
+    )
     return response
 
 
 @app.get("/api/calendar/callback")
 def calendar_callback(request: Request, code: str, state: str):
     saved_state = request.cookies.get("calendar_oauth_state")
-    if not saved_state or not secrets.compare_digest(saved_state, state):
-        raise HTTPException(status_code=400, detail="Estado OAuth inválido o expirado. Inicia de nuevo en /api/calendar/auth.")
+    code_verifier = request.cookies.get("calendar_oauth_verifier")
 
-    flow = google_oauth_flow(state=state)
+    if not saved_state or not secrets.compare_digest(saved_state, state):
+        raise HTTPException(
+            status_code=400,
+            detail="Estado OAuth inválido o expirado. Inicia de nuevo en /api/calendar/auth.",
+        )
+
+    if not code_verifier:
+        raise HTTPException(
+            status_code=400,
+            detail="OAuth code verifier missing. Inicia nuevamente en /api/calendar/auth.",
+        )
+
+    flow = google_oauth_flow(state=state, code_verifier=code_verifier)
     flow.fetch_token(code=code)
     token_json = flow.credentials.to_json()
 
-    # Persistencia segura del token en PostgreSQL, accesible entre reinicios de Render.
+    # Persistencia del token OAuth en PostgreSQL.
     with engine.begin() as conn:
         conn.execute(text("""
             INSERT INTO google_oauth_tokens (id, token_json, updated_at)
@@ -872,6 +901,7 @@ def calendar_callback(request: Request, code: str, state: str):
         "message": "Google Calendar autorizado. Ya puedes volver a VitalIQ.",
     })
     response.delete_cookie("calendar_oauth_state")
+    response.delete_cookie("calendar_oauth_verifier")
     return response
 
 
