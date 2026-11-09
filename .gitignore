@@ -8,3 +8,16 @@ __pycache__/
 backend/token.json
 backend/credentials.json
 .DS_Store
+
+# VitalIQ - secretos y archivos locales
+backend/token.json
+backend/credentials.json
+backend/.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Frontend generado
+frontend/dist/
+frontend/tsconfig.tsbuildinfo

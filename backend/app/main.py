@@ -1,3 +1,12 @@
+import os
+import secrets
+import json
+
+from fastapi import Request
+from fastapi.responses import JSONResponse, RedirectResponse
+from google_auth_oauthlib.flow import Flow
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request as GoogleRequest
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from openpyxl import load_workbook
@@ -38,6 +47,15 @@ app.add_middleware(
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(bind=engine)
+    # Token OAuth persistente en PostgreSQL (no depende del filesystem de Render).
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS google_oauth_tokens (
+                id INTEGER PRIMARY KEY,
+                token_json TEXT NOT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
 
 
 # ============================================================
@@ -794,51 +812,105 @@ from googleapiclient.discovery import build
 from fastapi import HTTPException, Query
 
 
+GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "https://vitaliq-api.onrender.com/api/calendar/callback")
+
+
+def google_oauth_flow(state=None):
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=500, detail="Faltan GOOGLE_CLIENT_ID o GOOGLE_CLIENT_SECRET en Render.")
+    config = {
+        "web": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [GOOGLE_REDIRECT_URI],
+        }
+    }
+    flow = Flow.from_client_config(config, scopes=GOOGLE_SCOPES, state=state)
+    flow.redirect_uri = GOOGLE_REDIRECT_URI
+    return flow
+
+
+@app.get("/api/calendar/auth")
+def calendar_auth():
+    state = secrets.token_urlsafe(32)
+    flow = google_oauth_flow(state=state)
+    authorization_url, _ = flow.authorization_url(
+        access_type="offline",
+        prompt="select_account consent",
+        include_granted_scopes="true",
+    )
+    response = RedirectResponse(authorization_url)
+    response.set_cookie("calendar_oauth_state", state, httponly=True, secure=True, samesite="lax", max_age=600)
+    return response
+
+
+@app.get("/api/calendar/callback")
+def calendar_callback(request: Request, code: str, state: str):
+    saved_state = request.cookies.get("calendar_oauth_state")
+    if not saved_state or not secrets.compare_digest(saved_state, state):
+        raise HTTPException(status_code=400, detail="Estado OAuth inválido o expirado. Inicia de nuevo en /api/calendar/auth.")
+
+    flow = google_oauth_flow(state=state)
+    flow.fetch_token(code=code)
+    token_json = flow.credentials.to_json()
+
+    # Persistencia segura del token en PostgreSQL, accesible entre reinicios de Render.
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO google_oauth_tokens (id, token_json, updated_at)
+            VALUES (1, :token_json, CURRENT_TIMESTAMP)
+            ON CONFLICT (id) DO UPDATE
+            SET token_json = EXCLUDED.token_json, updated_at = CURRENT_TIMESTAMP
+        """), {"token_json": token_json})
+
+    response = JSONResponse({
+        "success": True,
+        "message": "Google Calendar autorizado. Ya puedes volver a VitalIQ.",
+    })
+    response.delete_cookie("calendar_oauth_state")
+    return response
+
+
 @app.get("/api/calendar/events")
 def get_calendar_events(max_results: int = Query(100, ge=1, le=250)):
     try:
-        backend_dir = Path(__file__).resolve().parent.parent
-        token_path = backend_dir / "token.json"
+        # Prioridad: token guardado en PostgreSQL. Fallback temporal al token.json local.
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT token_json FROM google_oauth_tokens WHERE id = 1")).fetchone()
 
-        if not token_path.exists():
-            raise HTTPException(
-                status_code=401,
-                detail="Google Calendar no está autorizado."
-            )
-
-        creds = Credentials.from_authorized_user_file(
-            str(token_path),
-            ["https://www.googleapis.com/auth/calendar.readonly"]
-        )
+        if row and row[0]:
+            creds = Credentials.from_authorized_user_info(json.loads(row[0]), GOOGLE_SCOPES)
+        else:
+            backend_dir = Path(__file__).resolve().parent.parent
+            token_path = backend_dir / "token.json"
+            if not token_path.exists():
+                raise HTTPException(status_code=401, detail="Google Calendar no está autorizado. Abre /api/calendar/auth.")
+            creds = Credentials.from_authorized_user_file(str(token_path), GOOGLE_SCOPES)
 
         if creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            creds.refresh(GoogleRequest())
+            # Guardar la credencial refrescada en PostgreSQL si ya existe autorización allí.
+            if row and row[0]:
+                with engine.begin() as conn:
+                    conn.execute(text("UPDATE google_oauth_tokens SET token_json = :token_json, updated_at = CURRENT_TIMESTAMP WHERE id = 1"),
+                               {"token_json": creds.to_json()})
 
-            token_path.write_text(creds.to_json())
-
-        service = build(
-            "calendar",
-            "v3",
-            credentials=creds,
-            cache_discovery=False
-        )
-
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
         now = datetime.now(timezone.utc).isoformat()
-
         result = service.events().list(
-            calendarId="primary",
-            timeMin=now,
-            maxResults=max_results,
-            singleEvents=True,
-            orderBy="startTime"
+            calendarId="primary", timeMin=now, maxResults=max_results,
+            singleEvents=True, orderBy="startTime"
         ).execute()
 
         events = []
-
         for event in result.get("items", []):
             start = event.get("start", {})
             end = event.get("end", {})
-
             events.append({
                 "id": event.get("id"),
                 "summary": event.get("summary", "(Sin título)"),
@@ -846,23 +918,14 @@ def get_calendar_events(max_results: int = Query(100, ge=1, le=250)):
                 "start": start.get("dateTime", start.get("date")),
                 "end": end.get("dateTime", end.get("date")),
                 "status": event.get("status"),
-                "location": event.get("location", "")
+                "location": event.get("location", ""),
             })
-
-        return {
-            "success": True,
-            "total": len(events),
-            "events": events
-        }
+        return {"success": True, "total": len(events), "events": events}
 
     except HTTPException:
         raise
-
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error consultando Google Calendar: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error consultando Google Calendar: {str(e)}")
 
 @app.get("/api/dashboard/stats")
 def dashboard_stats(db: Session = Depends(get_db)):
