@@ -1,5 +1,6 @@
 import { API_URL } from '../api';
 import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
 import {
   Search,
   RefreshCw,
@@ -99,20 +100,20 @@ function getPatientName(patient: Patient): string {
     .join(' ') || 'Paciente sin nombre';
 }
 
-const cardStyle: React.CSSProperties = {
+const cardStyle: CSSProperties = {
   background: '#fff',
   border: '1px solid #e2e8f0',
   borderRadius: 12,
   padding: 20
 };
 
-const labelStyle: React.CSSProperties = {
+const labelStyle: CSSProperties = {
   color: '#64748b',
   fontSize: 13,
   marginBottom: 6
 };
 
-const valueStyle: React.CSSProperties = {
+const valueStyle: CSSProperties = {
   fontSize: 15,
   fontWeight: 600,
   color: '#1e293b',
@@ -136,7 +137,9 @@ export default function Pacientes() {
     setError('');
 
     try {
-      const response = await fetch(`${API_URL}/pacientes?limit=100&offset=0`);
+      const response = await fetch(`${API_URL}/pacientes?limit=100&offset=0`, {
+        credentials: 'include'
+      });
 
       if (!response.ok) {
         throw new Error('No fue posible cargar los pacientes.');
@@ -165,7 +168,8 @@ export default function Pacientes() {
 
     try {
       const response = await fetch(
-        `${API_URL}/pacientes/${patient.id}/atenciones`
+        `${API_URL}/pacientes/${patient.id}/atenciones`,
+        { credentials: 'include' }
       );
 
       if (!response.ok) {

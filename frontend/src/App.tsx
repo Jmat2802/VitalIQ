@@ -1,4 +1,3 @@
-
 import { API_BASE_URL } from './api';
 import { useState, useEffect } from 'react';
 import {
@@ -15,7 +14,10 @@ import {
   Wifi,
   WifiOff,
   FileSpreadsheet,
-  X
+  X,
+  LogOut,
+  LoaderCircle,
+  LockKeyhole
 } from 'lucide-react';
 
 import Inicio from './pages/Inicio-temp';
@@ -24,15 +26,22 @@ import Pacientes from './pages/Pacientes-temp';
 import Analitica from './pages/Analitica-temp';
 import CargaExcel from './pages/CargaExcel-temp';
 
-type Role = 'superadmin' | 'admin' | 'usuario';
+type Role = 'admin' | 'colaborador';
 
-const roleNames: Record<Role, string> = {
-  superadmin: 'Superadmin',
-  admin: 'Administrador',
-  usuario: 'Usuario'
+type User = {
+  email: string;
+  name?: string;
+  role: Role;
 };
 
-const navigation = [
+type PageName = 'Inicio' | 'Agenda' | 'Pacientes' | 'Analítica' | 'Carga Excel';
+
+const roleNames: Record<Role, string> = {
+  admin: 'Administrador',
+  colaborador: 'Colaborador'
+};
+
+const navigation: { name: PageName; icon: typeof LayoutDashboard }[] = [
   { name: 'Inicio', icon: LayoutDashboard },
   { name: 'Agenda', icon: CalendarDays },
   { name: 'Pacientes', icon: Users },
@@ -40,26 +49,72 @@ const navigation = [
   { name: 'Carga Excel', icon: FileSpreadsheet }
 ];
 
+const ADMIN_PAGES: PageName[] = ['Inicio', 'Agenda', 'Pacientes', 'Analítica', 'Carga Excel'];
+const COLLABORATOR_PAGES: PageName[] = ['Carga Excel'];
+
 export default function App() {
-  const [role, setRole] = useState<Role>('admin');
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginError, setLoginError] = useState('');
   const [open, setOpen] = useState(false);
   const [mobile, setMobile] = useState(false);
-  const [activePage, setActivePage] = useState('Inicio');
+  const [activePage, setActivePage] = useState<PageName>('Inicio');
   const [apiStatus, setApiStatus] = useState('Comprobando conexión...');
+  const [logoutLoading, setLogoutLoading] = useState(false);
+
+  const isAdmin = user?.role === 'admin';
+  const allowedPages = isAdmin ? ADMIN_PAGES : COLLABORATOR_PAGES;
 
   useEffect(() => {
+    let cancelled = false;
+
+    fetch(`${API_BASE_URL}/api/auth/me`, {
+      credentials: 'include'
+    })
+      .then(async (response) => {
+        if (response.status === 401) return null;
+        if (!response.ok) throw new Error('No se pudo validar la sesión');
+        return response.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.authenticated && data?.user) {
+          setUser(data.user as User);
+          const role = data.user.role as Role;
+          setActivePage(role === 'colaborador' ? 'Carga Excel' : 'Inicio');
+        } else {
+          setUser(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoginError('No fue posible conectar con VitalIQ. Verificá tu conexión e intentá nuevamente.');
+      })
+      .finally(() => {
+        if (!cancelled) setAuthLoading(false);
+      });
+
     fetch(`${API_BASE_URL}/api/health`)
       .then((response) => {
         if (!response.ok) throw new Error('API error');
         return response.json();
       })
-      .then((data) => {
-        setApiStatus(data.status === 'ok' ? 'Conectado' : 'Error de API');
-      })
+      .then((data) => setApiStatus(data.status === 'ok' ? 'Conectado' : 'Error de API'))
       .catch(() => setApiStatus('Backend desconectado'));
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Cerrar menú con Escape y bloquear scroll del fondo
+  // Mantener siempre al usuario en una página permitida para su rol.
+  useEffect(() => {
+    if (!user) return;
+    if (!allowedPages.includes(activePage)) {
+      setActivePage(user.role === 'colaborador' ? 'Carga Excel' : 'Inicio');
+    }
+  }, [user, activePage, allowedPages]);
+
+  // Cerrar menú con Escape y bloquear scroll del fondo.
   useEffect(() => {
     if (!mobile) return;
 
@@ -83,30 +138,92 @@ export default function App() {
     year: 'numeric'
   });
 
-  const navigate = (page: string) => {
+  const navigate = (page: PageName) => {
+    if (!allowedPages.includes(page)) return;
     setActivePage(page);
     setMobile(false);
     setOpen(false);
   };
 
-  const renderPage = () => {
-    switch (activePage) {
-      case 'Agenda':
-        return <Agenda />;
-      case 'Pacientes':
-        return <Pacientes />;
-      case 'Analítica':
-        return <Analitica />;
-      case 'Carga Excel':
-        return <CargaExcel />;
-      default:
-        return <Inicio />;
+  const handleGoogleLogin = () => {
+    setLoginError('');
+    window.location.assign(`${API_BASE_URL}/api/auth/google`);
+  };
+
+  const handleLogout = async () => {
+    setLogoutLoading(true);
+    try {
+      await fetch(`${API_BASE_URL}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+    } finally {
+      setUser(null);
+      setOpen(false);
+      setMobile(false);
+      setActivePage('Inicio');
+      setLogoutLoading(false);
     }
   };
 
+  const renderPage = () => {
+    if (!user) return null;
+
+    switch (activePage) {
+      case 'Agenda':
+        return isAdmin ? <Agenda /> : null;
+      case 'Pacientes':
+        return isAdmin ? <Pacientes /> : null;
+      case 'Analítica':
+        return isAdmin ? <Analitica /> : null;
+      case 'Carga Excel':
+        return <CargaExcel />;
+      default:
+        return isAdmin ? <Inicio /> : <CargaExcel />;
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div className="auth-screen">
+        <div className="auth-card">
+          <HeartPulse className="auth-logo" />
+          <h1>VitalIQ</h1>
+          <p>Verificando acceso seguro…</p>
+          <LoaderCircle className="auth-spinner" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="auth-screen">
+        <div className="auth-card">
+          <HeartPulse className="auth-logo" />
+          <small>INTELLIGENCE IN HEALTH</small>
+          <h1>VitalIQ</h1>
+          <p>Ingresá con tu cuenta autorizada de Google para continuar.</p>
+
+          {loginError && <div className="auth-error" role="alert">{loginError}</div>}
+
+          <button type="button" className="google-login-button" onClick={handleGoogleLogin}>
+            <LockKeyhole size={18} />
+            Continuar con Google
+            <ArrowRight size={18} />
+          </button>
+
+          <div className="auth-security">
+            <ShieldCheck size={16} />
+            Acceso restringido a cuentas autorizadas
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="shell">
-
       {/* Fondo del menú móvil */}
       {mobile && (
         <button
@@ -149,7 +266,7 @@ export default function App() {
         <label>PLATAFORMA</label>
 
         <nav>
-          {navigation.map((item) => {
+          {navigation.filter((item) => allowedPages.includes(item.name)).map((item) => {
             const Icon = item.icon;
 
             return (
@@ -174,7 +291,7 @@ export default function App() {
         </div>
 
         <small className="version">
-          VitalIQ · Preview 0.3
+          VitalIQ · Preview 0.4
         </small>
       </aside>
 
@@ -192,10 +309,8 @@ export default function App() {
           </button>
 
           <div className="breadcrumb">
-            <span className="clinic-desktop">
-              Clínica Integral San Rafael
-            </span>
-            <span className="breadcrumb-separator">/</span>
+            {isAdmin && <span className="clinic-desktop">Clínica Integral San Rafael</span>}
+            {isAdmin && <span className="breadcrumb-separator">/</span>}
             <b>{activePage}</b>
           </div>
 
@@ -205,11 +320,11 @@ export default function App() {
               aria-expanded={open}
               onClick={() => setOpen(!open)}
             >
-              <i>{role[0].toUpperCase()}</i>
+              <i>{(user.name || user.email)[0].toUpperCase()}</i>
 
               <span>
-                <b>{roleNames[role]}</b>
-                <small>Perfil demo</small>
+                <b>{roleNames[user.role]}</b>
+                <small>{user.name || user.email}</small>
               </span>
 
               <ChevronDown />
@@ -217,25 +332,18 @@ export default function App() {
 
             {open && (
               <div className="menu">
-                {(['superadmin', 'admin', 'usuario'] as Role[]).map((r) => (
-                  <button
-                    type="button"
-                    key={r}
-                    onClick={() => {
-                      setRole(r);
-                      setOpen(false);
-                    }}
-                  >
-                    {roleNames[r]} {role === r ? '✓' : ''}
-                  </button>
-                ))}
+                <div className="profile-menu-email">{user.email}</div>
+                <button type="button" onClick={handleLogout} disabled={logoutLoading}>
+                  <LogOut size={16} />
+                  {logoutLoading ? 'Cerrando sesión…' : 'Cerrar sesión'}
+                </button>
               </div>
             )}
           </div>
         </header>
 
         <section>
-          {activePage === 'Inicio' && (
+          {isAdmin && activePage === 'Inicio' && (
             <div className="welcome">
               <div>
                 <label>
@@ -244,7 +352,7 @@ export default function App() {
                 </label>
 
                 <h1>
-                  Buenos días, <em>{roleNames[role]}</em>
+                  Buenos días, <em>{user.name || roleNames[user.role]}</em>
                 </h1>
 
                 <p>
@@ -259,7 +367,7 @@ export default function App() {
             </div>
           )}
 
-          {activePage === 'Inicio' && (
+          {isAdmin && activePage === 'Inicio' && (
             <div className="hero">
               <div>
                 <small>VITALIQ · HEALTH INTELLIGENCE</small>
@@ -274,10 +382,7 @@ export default function App() {
                   Información organizada para tomar mejores decisiones.
                 </p>
 
-                <button
-                  type="button"
-                  onClick={() => navigate('Analítica')}
-                >
+                <button type="button" onClick={() => navigate('Analítica')}>
                   Explorar panel <ArrowRight />
                 </button>
               </div>
@@ -303,7 +408,7 @@ export default function App() {
 
           <div className="notice">
             <ShieldCheck />
-            <span>VitalIQ · Conectado a la plataforma</span>
+            <span>VitalIQ · Sesión autenticada</span>
 
             <span className="api-indicator">
               {apiStatus === 'Conectado' ? (

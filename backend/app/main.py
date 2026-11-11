@@ -267,53 +267,6 @@ def auth_me(user=Depends(current_user)):
 
 
 
-@app.get("/api/auth/google/callback")
-def auth_google_callback(request: Request, code: str, state: str):
-    saved_state = request.cookies.get("vitaliq_login_state")
-    verifier = request.cookies.get("vitaliq_login_verifier")
-    if not saved_state or not secrets.compare_digest(saved_state, state) or not verifier:
-        raise HTTPException(status_code=400, detail="Login OAuth inválido o expirado. Intenta de nuevo.")
-    client_id = os.getenv("GOOGLE_CLIENT_ID")
-    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    redirect_uri = os.getenv(
-        "GOOGLE_LOGIN_REDIRECT_URI",
-        "https://vitaliq-api.onrender.com/api/auth/google/callback"
-    )
-    config = {"web": {
-        "client_id": client_id, "client_secret": client_secret,
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "redirect_uris": [redirect_uri],
-    }}
-    flow = Flow.from_client_config(
-        config, scopes=["openid", "email", "profile"],
-        state=state, code_verifier=verifier
-    )
-    flow.redirect_uri = redirect_uri
-    flow.fetch_token(code=code)
-    claims = id_token.verify_oauth2_token(
-        flow.credentials.id_token, google_requests.Request(), client_id
-    )
-    email = (claims.get("email") or "").strip().lower()
-    if not claims.get("email_verified"):
-        raise HTTPException(status_code=403, detail="Google no confirmó el correo.")
-    allowed = {x.lower() for x in ADMIN_EMAILS | COLLABORATOR_EMAILS}
-    if email not in allowed:
-        raise HTTPException(status_code=403, detail="Cuenta Google no autorizada para VitalIQ.")
-    payload = {"email": email, "name": claims.get("name", email)}
-    signed = session_serializer().dumps(payload)
-    frontend = os.getenv("FRONTEND_URL", "https://vital-iq-sand.vercel.app")
-    response = RedirectResponse(frontend)
-    response.set_cookie(SESSION_COOKIE, signed, httponly=True, secure=True,
-                        samesite="lax", max_age=SESSION_MAX_AGE, path="/")
-    for key in ("vitaliq_login_state", "vitaliq_login_verifier"):
-        response.delete_cookie(key)
-    return response
-
-
-
-
-
 @app.post("/api/auth/logout")
 def auth_logout():
     response = JSONResponse({"success": True, "message": "Sesión cerrada."})

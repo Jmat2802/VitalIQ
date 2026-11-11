@@ -1,7 +1,7 @@
 
 import { API_URL } from '../api';
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   ResponsiveContainer,
   PieChart,
@@ -364,7 +364,10 @@ export default function Analitica() {
       setError('');
 
       const response = await fetch(
-        `${API}?limit=10000&offset=0`
+        `${API}?limit=10000&offset=0`,
+        {
+          credentials: 'include'
+        }
       );
 
       if (!response.ok) {

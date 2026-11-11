@@ -1331,15 +1331,23 @@ export default function Inicio() {
     setError('');
 
     try {
-      const [
-        patientsResponse,
-        calendarResponse,
-        statsResponse
-      ] = await Promise.all([
-        fetch(`${API}/api/pacientes?limit=100&offset=0`),
-        fetch(`${API}/api/calendar/events?max_results=100`),
-        fetch(`${API}/api/dashboard/stats`)
-      ]);
+      
+const [
+  patientsResponse,
+  calendarResponse,
+  statsResponse
+] = await Promise.all([
+  fetch(`${API}/api/pacientes?limit=100&offset=0`, {
+    credentials: 'include'
+  }),
+  fetch(`${API}/api/calendar/events?max_results=100`, {
+    credentials: 'include'
+  }),
+  fetch(`${API}/api/dashboard/stats`, {
+    credentials: 'include'
+  })
+]);
+
 
       if (!patientsResponse.ok) {
         throw new Error('No fue posible consultar los pacientes.');

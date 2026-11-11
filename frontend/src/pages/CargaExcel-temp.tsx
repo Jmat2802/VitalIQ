@@ -70,6 +70,7 @@ export default function CargaExcel() {
           {
             method: 'POST',
             body: formData,
+            credentials: 'include',
           }
         );
 
@@ -124,6 +125,7 @@ export default function CargaExcel() {
           {
             method: 'POST',
             body: formData,
+            credentials: 'include',
           }
         );
 
