@@ -244,7 +244,7 @@ def auth_google_callback(request: Request, code: str, state: str):
         signed,
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",
         max_age=SESSION_MAX_AGE,
         path="/"
     )
