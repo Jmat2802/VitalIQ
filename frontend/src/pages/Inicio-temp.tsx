@@ -137,6 +137,108 @@ function getPercentage(value: number, total: number) {
   return total > 0 ? Math.round((value / total) * 100) : 0;
 }
 
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onChange
+}: {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const filtered = options.filter(option =>
+    option.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function toggleOption(option: string) {
+    onChange(
+      selected.includes(option)
+        ? selected.filter(value => value !== option)
+        : [...selected, option]
+    );
+  }
+
+  return (
+    <div style={{ position: 'relative', minWidth: 0 }}>
+      <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+        {label}
+      </label>
+      <button
+        type="button"
+        onClick={() => setOpen(value => !value)}
+        aria-expanded={open}
+        style={{
+          width: '100%', minHeight: 42, display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', gap: 8, padding: '9px 11px',
+          border: `1px solid ${open ? '#477ce0' : '#d5deea'}`, borderRadius: 9,
+          background: '#fff', color: '#334155', cursor: 'pointer', textAlign: 'left',
+          boxShadow: open ? '0 0 0 3px rgba(71,124,224,.10)' : 'none'
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>
+          {selected.length ? `${selected.length} seleccionado${selected.length !== 1 ? 's' : ''}` : 'Todos'}
+        </span>
+        <span style={{ color: '#64748b', fontSize: 11 }}>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {selected.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
+          {selected.slice(0, 3).map(value => (
+            <span key={value} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              background: '#eaf2ff', color: '#2456a6', borderRadius: 6,
+              padding: '4px 6px', fontSize: 10, maxWidth: '100%'
+            }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</span>
+              <button type="button" aria-label={`Quitar ${value}`} onClick={() => toggleOption(value)}
+                style={{ border: 0, background: 'transparent', color: '#2456a6', padding: 0, cursor: 'pointer', fontWeight: 700 }}>×</button>
+            </span>
+          ))}
+          {selected.length > 3 && <span style={{ fontSize: 10, color: '#64748b', alignSelf: 'center' }}>+{selected.length - 3}</span>}
+        </div>
+      )}
+
+      {open && (
+        <div style={{
+          position: 'absolute', zIndex: 30, top: '100%', left: 0, right: 0,
+          marginTop: 5, background: '#fff', border: '1px solid #dbe3ef',
+          borderRadius: 10, boxShadow: '0 12px 28px rgba(15,23,42,.14)', padding: 8
+        }}>
+          <input value={search} onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.currentTarget.value)}
+            placeholder="Buscar opción..." aria-label={`Buscar ${label}`}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '8px 9px',
+              border: '1px solid #e2e8f0', borderRadius: 7, outlineColor: '#477ce0',
+              fontSize: 12, marginBottom: 6 }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 3px 7px' }}>
+            <button type="button" onClick={() => onChange(options)}
+              style={{ border: 0, background: 'transparent', color: '#477ce0', fontSize: 11, cursor: 'pointer' }}>Seleccionar todos</button>
+            <button type="button" onClick={() => onChange([])}
+              style={{ border: 0, background: 'transparent', color: '#64748b', fontSize: 11, cursor: 'pointer' }}>Limpiar</button>
+          </div>
+          <div style={{ maxHeight: 190, overflowY: 'auto' }}>
+            {filtered.map(option => (
+              <label key={option} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '7px 5px',
+                borderRadius: 6, cursor: 'pointer', color: '#334155', fontSize: 12
+              }}>
+                <input type="checkbox" checked={selected.includes(option)}
+                  onChange={() => toggleOption(option)} />
+                <span>{option}</span>
+              </label>
+            ))}
+            {filtered.length === 0 && <div style={{ padding: 10, color: '#94a3b8', fontSize: 12 }}>Sin coincidencias</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SectionHeading({
   number,
   title,
@@ -1517,20 +1619,12 @@ const [
             ['Atención',[['sede_atencion','Sede de atención'],['condicion','Condición'],['tipo_servicio','Tipo de servicio']]]
           ].map(([group,items]:any)=><div key={group} style={{marginTop:15}}>
             <div style={{fontSize:12,fontWeight:700,marginBottom:8,color:'#475569'}}>{group}</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:10}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:14}}>
               {items.map(([key,label]:[string,string])=>{
                 const source: CategoryCount[] = stats?.opciones?.[key] ?? [];
                 const options = Array.from(new Set(source.map((item: CategoryCount) => item.categoria)));
-                return <label key={key} style={{fontSize:12,color:'#64748b'}}>{label}
-                  <select multiple value={filters[key]} onChange={(e: ChangeEvent<HTMLSelectElement>)=>{
-                      const selected=Array.from(e.currentTarget.selectedOptions, option=>option.value);
-                      setFilters(prev=>({...prev,[key]:selected}));
-                    }}
-                    title="Mantén Ctrl (Windows) o ⌘ (Mac) para seleccionar varios"
-                    style={{display:'block',width:'100%',marginTop:6,minHeight:76,padding:6,border:'1px solid #d1d5db',borderRadius:8,background:'white',color:'#334155'}}>
-                    {options.map(value=><option key={value} value={value}>{value}</option>)}
-                  </select>
-                </label>;
+                return <MultiSelectFilter key={key} label={label} options={options}
+                  selected={filters[key]} onChange={selected=>setFilters(prev=>({...prev,[key]:selected}))} />;
               })}
             </div>
           </div>)}
