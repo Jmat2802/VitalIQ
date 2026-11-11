@@ -1,6 +1,7 @@
 
 import { API_BASE_URL } from '../api';
 import { useEffect, useState } from 'react';
+import type { ElementType, ChangeEvent } from 'react';
 import {
   Users,
   CalendarDays,
@@ -48,6 +49,7 @@ type CategoryAmount = {
 
 type DashboardStats = {
   success: boolean;
+  opciones?: Record<string, CategoryCount[]>;
   pacientes: {
     total: number;
     genero: CategoryCount[];
@@ -144,7 +146,7 @@ function SectionHeading({
   number: string;
   title: string;
   description: string;
-  icon: React.ElementType;
+  icon: ElementType;
 }) {
   return (
     <div className="vi-home-section-heading">
@@ -173,7 +175,7 @@ function StatCard({
   title: string;
   value: string;
   detail: string;
-  icon: React.ElementType;
+  icon: ElementType;
   accent: string;
   loading: boolean;
 }) {
@@ -1327,6 +1329,11 @@ export default function Inicio() {
   const [error, setError] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState<Record<string, string[]>>({
+    genero: [], nacionalidad: [], estado_civil: [], provincia: [], canton: [], distrito: [],
+    grupo_etario: [], residencia: [], sede_atencion: [], condicion: [], tipo_servicio: []
+  });
 
   async function loadDashboard() {
     setLoading(true);
@@ -1334,7 +1341,13 @@ export default function Inicio() {
 
     try {
       
-const statsUrl = `${API}/api/dashboard/stats${startDate || endDate ? `?${new URLSearchParams({ ...(startDate ? { start_date: startDate } : {}), ...(endDate ? { end_date: endDate } : {}) }).toString()}` : ''}`;
+const params = new URLSearchParams();
+      if (startDate) params.set('start_date', startDate);
+      if (endDate) params.set('end_date', endDate);
+      Object.entries(filters).forEach(([key, values]) => {
+        if (values.length) params.set(key, values.join(','));
+      });
+      const statsUrl = `${API}/api/dashboard/stats${params.toString() ? `?${params.toString()}` : ''}`;
 
 const [
   patientsResponse,
@@ -1392,7 +1405,7 @@ const [
 
   useEffect(() => {
     void loadDashboard();
-  }, [startDate, endDate]);
+  }, [startDate, endDate, filters]);
 
   const monthlyAppointments = events.filter(event =>
     isSameMonth(event.start)
@@ -1479,27 +1492,54 @@ const [
         </div>
       </header>
 
-      {/* FILTRO DE PERÍODO */}
+      {/* FILTROS DE ANÁLISIS */}
       <section className="vi-home-panel" style={{ padding: '16px 20px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'end', gap: 12 }}>
-          <div style={{ flex: '1 1 180px' }}>
-            <label style={{ display: 'block', fontSize: 12, marginBottom: 6 }}>Desde</label>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #d1d5db' }} />
+        <button type="button" onClick={() => setFiltersOpen(!filtersOpen)}
+          aria-expanded={filtersOpen}
+          style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', background:'transparent', border:0, cursor:'pointer', color:'inherit', padding:0 }}>
+          <span style={{display:'flex',alignItems:'center',gap:10,fontWeight:700}}>
+            <Activity size={18}/> Filtros de análisis
+            {(Object.values(filters).flat().length > 0 || startDate || endDate) &&
+              <span style={{fontSize:11,padding:'3px 8px',borderRadius:20,background:'#dbeafe',color:'#1d4ed8'}}>
+                {Object.values(filters).flat().length + (startDate || endDate ? 1 : 0)} activos
+              </span>}
+          </span>
+          <span style={{fontSize:13,color:'#64748b'}}>{filtersOpen ? 'Ocultar ▲' : 'Mostrar filtros ▼'}</span>
+        </button>
+        {filtersOpen && <div style={{marginTop:16}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12}}>
+            <label style={{fontSize:12,color:'#64748b'}}>Desde<input type="date" value={startDate} onChange={(e: ChangeEvent<HTMLInputElement>)=>setStartDate(e.currentTarget.value)} style={{display:'block',width:'100%',marginTop:6,padding:9,border:'1px solid #d1d5db',borderRadius:8}}/></label>
+            <label style={{fontSize:12,color:'#64748b'}}>Hasta<input type="date" value={endDate} onChange={(e: ChangeEvent<HTMLInputElement>)=>setEndDate(e.currentTarget.value)} style={{display:'block',width:'100%',marginTop:6,padding:9,border:'1px solid #d1d5db',borderRadius:8}}/></label>
           </div>
-          <div style={{ flex: '1 1 180px' }}>
-            <label style={{ display: 'block', fontSize: 12, marginBottom: 6 }}>Hasta</label>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #d1d5db' }} />
+          {[
+            ['Demografía',[['genero','Género'],['nacionalidad','Nacionalidad'],['estado_civil','Estado civil'],['grupo_etario','Grupo etario']]],
+            ['Ubicación',[['provincia','Provincia'],['canton','Cantón'],['distrito','Distrito'],['residencia','Residencia']]],
+            ['Atención',[['sede_atencion','Sede de atención'],['condicion','Condición'],['tipo_servicio','Tipo de servicio']]]
+          ].map(([group,items]:any)=><div key={group} style={{marginTop:15}}>
+            <div style={{fontSize:12,fontWeight:700,marginBottom:8,color:'#475569'}}>{group}</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:10}}>
+              {items.map(([key,label]:[string,string])=>{
+                const source: CategoryCount[] = stats?.opciones?.[key] ?? [];
+                const options = Array.from(new Set(source.map((item: CategoryCount) => item.categoria)));
+                return <label key={key} style={{fontSize:12,color:'#64748b'}}>{label}
+                  <select multiple value={filters[key]} onChange={(e: ChangeEvent<HTMLSelectElement>)=>{
+                      const selected=Array.from(e.currentTarget.selectedOptions, option=>option.value);
+                      setFilters(prev=>({...prev,[key]:selected}));
+                    }}
+                    title="Mantén Ctrl (Windows) o ⌘ (Mac) para seleccionar varios"
+                    style={{display:'block',width:'100%',marginTop:6,minHeight:76,padding:6,border:'1px solid #d1d5db',borderRadius:8,background:'white',color:'#334155'}}>
+                    {options.map(value=><option key={value} value={value}>{value}</option>)}
+                  </select>
+                </label>;
+              })}
+            </div>
+          </div>)}
+          <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:15}}>
+            <button type="button" onClick={()=>{setStartDate('');setEndDate('');setFilters({genero:[],nacionalidad:[],estado_civil:[],provincia:[],canton:[],distrito:[],grupo_etario:[],residencia:[],sede_atencion:[],condicion:[],tipo_servicio:[]});}}
+              style={{padding:'9px 13px',border:'1px solid #cbd5e1',borderRadius:8,background:'white',cursor:'pointer'}}>Limpiar todo</button>
           </div>
-          <button type="button" onClick={() => { setStartDate(''); setEndDate(''); }}
-            style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>
-            Todo el período
-          </button>
-        </div>
-        <small style={{ display: 'block', marginTop: 9, color: '#64748b' }}>
-          El período filtra atenciones, comercial y finanzas. La ficha demográfica de pacientes corresponde a toda la base.
-        </small>
+          <small style={{display:'block',marginTop:8,color:'#64748b'}}>Selección múltiple: usa ⌘ en Mac o Ctrl en Windows. Las cifras se actualizan conservando todos los criterios.</small>
+        </div>}
       </section>
 
       {/* ESTADO DE CONEXIÓN */}

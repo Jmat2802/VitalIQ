@@ -1214,11 +1214,32 @@ def get_calendar_events(max_results: int = Query(100, ge=1, le=250), user=Depend
         raise HTTPException(status_code=500, detail=f"Error consultando Google Calendar: {str(e)}")
 
 @app.get("/api/dashboard/stats")
-def dashboard_stats(start_date: str = None, end_date: str = None, db: Session = Depends(get_db), user=Depends(require_admin)):
-    from sqlalchemy import func
+def dashboard_stats(
+    start_date: str = None,
+    end_date: str = None,
+    genero: str = None,
+    nacionalidad: str = None,
+    estado_civil: str = None,
+    provincia: str = None,
+    canton: str = None,
+    distrito: str = None,
+    grupo_etario: str = None,
+    residencia: str = None,
+    sede_atencion: str = None,
+    condicion: str = None,
+    tipo_servicio: str = None,
+    db: Session = Depends(get_db),
+    user=Depends(require_admin)
+):
+    from sqlalchemy import func, distinct
     from datetime import date
 
+    def values(raw):
+        return [v.strip() for v in (raw or "").split(",") if v.strip()]
+
     clinical_query = db.query(ClinicalRecord)
+    patient_query = db.query(Patient)
+
     try:
         if start_date:
             clinical_query = clinical_query.filter(ClinicalRecord.attention_date >= date.fromisoformat(start_date))
@@ -1227,34 +1248,45 @@ def dashboard_stats(start_date: str = None, end_date: str = None, db: Session = 
     except ValueError:
         raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD.")
 
+    # Los filtros demográficos se aplican a pacientes vinculados a las atenciones.
+    demographic_filters = [
+        (genero, Patient.genero), (nacionalidad, Patient.nacionalidad),
+        (estado_civil, Patient.estado_civil), (provincia, Patient.provincia),
+        (canton, Patient.canton), (distrito, Patient.distrito)
+    ]
+    has_patient_filters = False
+    for raw, field in demographic_filters:
+        selected = values(raw)
+        if selected:
+            has_patient_filters = True
+            patient_query = patient_query.filter(field.in_(selected))
+            clinical_query = clinical_query.join(Patient, ClinicalRecord.patient_id == Patient.id).filter(field.in_(selected))
+
+    clinical_filters = [
+        (grupo_etario, ClinicalRecord.age_group),
+        (residencia, ClinicalRecord.location),
+        (sede_atencion, ClinicalRecord.attention_location),
+        (condicion, ClinicalRecord.condition_type),
+        (tipo_servicio, ClinicalRecord.service_type)
+    ]
+    for raw, field in clinical_filters:
+        selected = values(raw)
+        if selected:
+            clinical_query = clinical_query.filter(field.in_(selected))
+
     def grouped_count(model_field, model):
-        base_query = clinical_query if model is ClinicalRecord else db.query(model)
-        rows = (
-            base_query.with_entities(model_field, func.count(model.id))
-            .group_by(model_field)
-            .order_by(func.count(model.id).desc())
-            .all()
-        )
-        return [
-            {"categoria": str(category or "Sin dato"), "cantidad": int(count)}
-            for category, count in rows
-        ]
+        base_query = clinical_query if model is ClinicalRecord else patient_query
+        rows = (base_query.with_entities(model_field, func.count(model.id))
+                .group_by(model_field).order_by(func.count(model.id).desc()).all())
+        return [{"categoria": str(category or "Sin dato"), "cantidad": int(count)} for category, count in rows]
 
     def grouped_sum(model_field):
-        rows = (
-            clinical_query.with_entities(model_field, func.sum(ClinicalRecord.total_amount))
-            .group_by(model_field)
-            .order_by(func.sum(ClinicalRecord.total_amount).desc())
-            .all()
-        )
-        return [
-            {"categoria": str(category or "Sin dato"), "monto": float(amount or 0)}
-            for category, amount in rows
-        ]
+        rows = (clinical_query.with_entities(model_field, func.sum(ClinicalRecord.total_amount))
+                .group_by(model_field).order_by(func.sum(ClinicalRecord.total_amount).desc()).all())
+        return [{"categoria": str(category or "Sin dato"), "monto": float(amount or 0)} for category, amount in rows]
 
-    # RPT_PACIENTES: demografía y residencia
     pacientes = {
-        "total": db.query(Patient).count(),
+        "total": patient_query.count() if has_patient_filters else db.query(Patient).count(),
         "genero": grouped_count(Patient.genero, Patient),
         "estado_civil": grouped_count(Patient.estado_civil, Patient),
         "nacionalidad": grouped_count(Patient.nacionalidad, Patient),
@@ -1264,8 +1296,6 @@ def dashboard_stats(start_date: str = None, end_date: str = None, db: Session = 
         "ocupacion": grouped_count(Patient.ocupacion, Patient),
         "escolaridad": grouped_count(Patient.escolaridad, Patient),
     }
-
-    # Hoja Diaria / registros de atención
     atenciones = {
         "total": clinical_query.count(),
         "grupo_etario": grouped_count(ClinicalRecord.age_group, ClinicalRecord),
@@ -1274,47 +1304,37 @@ def dashboard_stats(start_date: str = None, end_date: str = None, db: Session = 
         "tipo_servicio": grouped_count(ClinicalRecord.service_type, ClinicalRecord),
         "tipo_condicion": grouped_count(ClinicalRecord.condition_type, ClinicalRecord),
     }
+    comercial_rows = (clinical_query.with_entities(ClinicalRecord.consultations, func.count(ClinicalRecord.id))
+        .filter(ClinicalRecord.consultations.isnot(None), ClinicalRecord.consultations != "")
+        .group_by(ClinicalRecord.consultations).order_by(func.count(ClinicalRecord.id).desc()).all())
+    comercial = {"total_clasificadas": sum(int(count) for _, count in comercial_rows),
+        "categorias": [{"categoria": str(category), "cantidad": int(count)} for category, count in comercial_rows]}
 
-    # Comercial: clasificación registrada en columna L (Consultas)
-    comercial_rows = (
-        clinical_query.with_entities(ClinicalRecord.consultations, func.count(ClinicalRecord.id))
-        .filter(
-            ClinicalRecord.consultations.isnot(None),
-            ClinicalRecord.consultations != ""
-        )
-        .group_by(ClinicalRecord.consultations)
-        .order_by(func.count(ClinicalRecord.id).desc())
-        .all()
-    )
-    comercial = {
-        "total_clasificadas": sum(int(count) for _, count in comercial_rows),
-        "categorias": [
-            {"categoria": str(category), "cantidad": int(count)}
-            for category, count in comercial_rows
-        ],
-    }
-
-    # Finanzas: montos y pagos de Hoja Diaria
-    ingresos_totales = clinical_query.with_entities(func.sum(ClinicalRecord.total_amount)).scalar() or 0
-    ingresos_consultas = clinical_query.with_entities(func.sum(ClinicalRecord.consultation_amount)).scalar() or 0
-    ingresos_servicios = clinical_query.with_entities(func.sum(ClinicalRecord.service_amount)).scalar() or 0
-    ingresos_medicamentos = clinical_query.with_entities(func.sum(ClinicalRecord.medication_amount)).scalar() or 0
-
-    finanzas = {
-        "ingresos_totales": float(ingresos_totales),
-        "ingresos_consultas": float(ingresos_consultas),
-        "ingresos_servicios": float(ingresos_servicios),
-        "ingresos_medicamentos": float(ingresos_medicamentos),
+    total = clinical_query.with_entities(func.sum(ClinicalRecord.total_amount)).scalar() or 0
+    consultas = clinical_query.with_entities(func.sum(ClinicalRecord.consultation_amount)).scalar() or 0
+    servicios = clinical_query.with_entities(func.sum(ClinicalRecord.service_amount)).scalar() or 0
+    medicamentos = clinical_query.with_entities(func.sum(ClinicalRecord.medication_amount)).scalar() or 0
+    finanzas = {"ingresos_totales": float(total), "ingresos_consultas": float(consultas),
+        "ingresos_servicios": float(servicios), "ingresos_medicamentos": float(medicamentos),
         "por_forma_pago": grouped_sum(ClinicalRecord.payment_method),
-        "por_estado_pago": grouped_sum(ClinicalRecord.payment_status),
+        "por_estado_pago": grouped_sum(ClinicalRecord.payment_status)}
+    # Opciones completas para los selectores (no se reducen al aplicar filtros).
+    def all_categories(field, model):
+        rows = db.query(field).distinct().order_by(field).all()
+        return [{"categoria": str(row[0] or "Sin dato"), "cantidad": 0} for row in rows]
+    opciones = {
+        "genero": all_categories(Patient.genero, Patient),
+        "nacionalidad": all_categories(Patient.nacionalidad, Patient),
+        "estado_civil": all_categories(Patient.estado_civil, Patient),
+        "provincia": all_categories(Patient.provincia, Patient),
+        "canton": all_categories(Patient.canton, Patient),
+        "distrito": all_categories(Patient.distrito, Patient),
+        "grupo_etario": all_categories(ClinicalRecord.age_group, ClinicalRecord),
+        "residencia": all_categories(ClinicalRecord.location, ClinicalRecord),
+        "sede_atencion": all_categories(ClinicalRecord.attention_location, ClinicalRecord),
+        "condicion": all_categories(ClinicalRecord.condition_type, ClinicalRecord),
+        "tipo_servicio": all_categories(ClinicalRecord.service_type, ClinicalRecord),
     }
-
-    return {
-        "success": True,
-        "pacientes": pacientes,
-        "atenciones": atenciones,
-        "comercial": comercial,
-        "finanzas": finanzas,
-    }
+    return {"success": True, "pacientes": pacientes, "atenciones": atenciones, "comercial": comercial, "finanzas": finanzas, "opciones": opciones}
 
 # Nota: /api/calendar/auth y /api/calendar/callback conservan el OAuth de Calendar independiente.
