@@ -31,7 +31,7 @@ app = FastAPI(title="VitalIQ API")
 # AUTENTICACIÓN VITALIQ (Google Sign-In + sesión firmada)
 # ============================================================
 
-ADMIN_EMAILS = {"jmadrigal_abarca@yahoo.com"}
+ADMIN_EMAILS = {"jmadrigal_abarca@yahoo.com", "jimm2802@gmail.com"}
 COLLABORATOR_EMAILS = {"clinicasanrafael07@gmail.com"}
 SESSION_COOKIE = "vitaliq_session"
 SESSION_MAX_AGE = 60 * 60 * 12  # 12 horas
@@ -1214,12 +1214,23 @@ def get_calendar_events(max_results: int = Query(100, ge=1, le=250), user=Depend
         raise HTTPException(status_code=500, detail=f"Error consultando Google Calendar: {str(e)}")
 
 @app.get("/api/dashboard/stats")
-def dashboard_stats(db: Session = Depends(get_db), user=Depends(require_admin)):
+def dashboard_stats(start_date: str = None, end_date: str = None, db: Session = Depends(get_db), user=Depends(require_admin)):
     from sqlalchemy import func
+    from datetime import date
+
+    clinical_query = db.query(ClinicalRecord)
+    try:
+        if start_date:
+            clinical_query = clinical_query.filter(ClinicalRecord.attention_date >= date.fromisoformat(start_date))
+        if end_date:
+            clinical_query = clinical_query.filter(ClinicalRecord.attention_date <= date.fromisoformat(end_date))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD.")
 
     def grouped_count(model_field, model):
+        base_query = clinical_query if model is ClinicalRecord else db.query(model)
         rows = (
-            db.query(model_field, func.count(model.id))
+            base_query.with_entities(model_field, func.count(model.id))
             .group_by(model_field)
             .order_by(func.count(model.id).desc())
             .all()
@@ -1231,7 +1242,7 @@ def dashboard_stats(db: Session = Depends(get_db), user=Depends(require_admin)):
 
     def grouped_sum(model_field):
         rows = (
-            db.query(model_field, func.sum(ClinicalRecord.total_amount))
+            clinical_query.with_entities(model_field, func.sum(ClinicalRecord.total_amount))
             .group_by(model_field)
             .order_by(func.sum(ClinicalRecord.total_amount).desc())
             .all()
@@ -1256,7 +1267,7 @@ def dashboard_stats(db: Session = Depends(get_db), user=Depends(require_admin)):
 
     # Hoja Diaria / registros de atención
     atenciones = {
-        "total": db.query(ClinicalRecord).count(),
+        "total": clinical_query.count(),
         "grupo_etario": grouped_count(ClinicalRecord.age_group, ClinicalRecord),
         "ubicacion_residencia": grouped_count(ClinicalRecord.location, ClinicalRecord),
         "sede_atencion": grouped_count(ClinicalRecord.attention_location, ClinicalRecord),
@@ -1266,7 +1277,7 @@ def dashboard_stats(db: Session = Depends(get_db), user=Depends(require_admin)):
 
     # Comercial: clasificación registrada en columna L (Consultas)
     comercial_rows = (
-        db.query(ClinicalRecord.consultations, func.count(ClinicalRecord.id))
+        clinical_query.with_entities(ClinicalRecord.consultations, func.count(ClinicalRecord.id))
         .filter(
             ClinicalRecord.consultations.isnot(None),
             ClinicalRecord.consultations != ""
@@ -1284,10 +1295,10 @@ def dashboard_stats(db: Session = Depends(get_db), user=Depends(require_admin)):
     }
 
     # Finanzas: montos y pagos de Hoja Diaria
-    ingresos_totales = db.query(func.sum(ClinicalRecord.total_amount)).scalar() or 0
-    ingresos_consultas = db.query(func.sum(ClinicalRecord.consultation_amount)).scalar() or 0
-    ingresos_servicios = db.query(func.sum(ClinicalRecord.service_amount)).scalar() or 0
-    ingresos_medicamentos = db.query(func.sum(ClinicalRecord.medication_amount)).scalar() or 0
+    ingresos_totales = clinical_query.with_entities(func.sum(ClinicalRecord.total_amount)).scalar() or 0
+    ingresos_consultas = clinical_query.with_entities(func.sum(ClinicalRecord.consultation_amount)).scalar() or 0
+    ingresos_servicios = clinical_query.with_entities(func.sum(ClinicalRecord.service_amount)).scalar() or 0
+    ingresos_medicamentos = clinical_query.with_entities(func.sum(ClinicalRecord.medication_amount)).scalar() or 0
 
     finanzas = {
         "ingresos_totales": float(ingresos_totales),

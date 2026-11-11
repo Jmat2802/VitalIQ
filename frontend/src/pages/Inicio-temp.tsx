@@ -1325,6 +1325,8 @@ export default function Inicio() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   async function loadDashboard() {
     setLoading(true);
@@ -1332,6 +1334,8 @@ export default function Inicio() {
 
     try {
       
+const statsUrl = `${API}/api/dashboard/stats${startDate || endDate ? `?${new URLSearchParams({ ...(startDate ? { start_date: startDate } : {}), ...(endDate ? { end_date: endDate } : {}) }).toString()}` : ''}`;
+
 const [
   patientsResponse,
   calendarResponse,
@@ -1343,7 +1347,7 @@ const [
   fetch(`${API}/api/calendar/events?max_results=100`, {
     credentials: 'include'
   }),
-  fetch(`${API}/api/dashboard/stats`, {
+  fetch(statsUrl, {
     credentials: 'include'
   })
 ]);
@@ -1388,7 +1392,7 @@ const [
 
   useEffect(() => {
     void loadDashboard();
-  }, []);
+  }, [startDate, endDate]);
 
   const monthlyAppointments = events.filter(event =>
     isSameMonth(event.start)
@@ -1474,6 +1478,29 @@ const [
           </button>
         </div>
       </header>
+
+      {/* FILTRO DE PERÍODO */}
+      <section className="vi-home-panel" style={{ padding: '16px 20px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'end', gap: 12 }}>
+          <div style={{ flex: '1 1 180px' }}>
+            <label style={{ display: 'block', fontSize: 12, marginBottom: 6 }}>Desde</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+              style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #d1d5db' }} />
+          </div>
+          <div style={{ flex: '1 1 180px' }}>
+            <label style={{ display: 'block', fontSize: 12, marginBottom: 6 }}>Hasta</label>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+              style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #d1d5db' }} />
+          </div>
+          <button type="button" onClick={() => { setStartDate(''); setEndDate(''); }}
+            style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>
+            Todo el período
+          </button>
+        </div>
+        <small style={{ display: 'block', marginTop: 9, color: '#64748b' }}>
+          El período filtra atenciones, comercial y finanzas. La ficha demográfica de pacientes corresponde a toda la base.
+        </small>
+      </section>
 
       {/* ESTADO DE CONEXIÓN */}
       <div className="vi-home-status">
